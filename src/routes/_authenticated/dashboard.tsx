@@ -30,6 +30,7 @@ import {
 
 import { AppShell } from "@/components/layout/AppShell";
 import { MetricCard } from "@/components/common/MetricCard";
+import { PartImage } from "@/components/common/PartImage";
 import { SectionCard } from "@/components/common/SectionCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -117,7 +118,7 @@ function DashboardPage() {
 
   const accuracy = today.length === 0 ? 0 : Math.min(99.9, 96.4 + rate / 40);
   const isInspector = role === "inspector";
-  const selectedParts = ["Stud", "Adapter", "Capnut", "Pin"];
+  const selectedParts = ["Stud", "Adapter", "CapNut", "Pin"];
 
   return (
     <AppShell
@@ -172,10 +173,17 @@ function DashboardPage() {
                 </div>
               ) : (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {selectedParts.map((partName) => (
-                    <div key={partName} className="rounded-lg border border-border p-3">
-                      <p className="type-body-m font-semibold text-foreground">{partName}</p>
-                      <p className="type-body-s mt-1 text-muted-foreground">Choose a model, then measure and inspect.</p>
+                  {selectedParts.map((name) => (
+                    <div key={name} className="overflow-hidden rounded-lg border border-border">
+                      <PartImage
+                        partName={name}
+                        alt={name}
+                        className="h-28 w-full bg-muted object-contain p-2"
+                      />
+                      <div className="p-3">
+                        <p className="type-body-m font-semibold text-foreground">{name}</p>
+                        <p className="type-body-s mt-1 text-muted-foreground">Choose a model, then measure and inspect.</p>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -425,14 +433,22 @@ function DashboardPage() {
                 const okRows = rows.filter((r) => r.status === "ok").length;
                 const pct = rows.length ? Math.round((okRows / rows.length) * 100) : 0;
                 return (
-                  <div key={p.id} className="rounded-xl border border-border bg-background p-4">
-                    <p className="type-body-m font-semibold text-foreground">{p.part_name}</p>
-                    <p className="metric-s mt-2 text-brand-blue">{pct}%</p>
-                    <p className="type-caption mt-1 text-muted-foreground">
-                      {rows.length} inspections · {okRows} OK
-                    </p>
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-brand-blue" style={{ width: `${pct}%` }} />
+                  <div key={p.id} className="overflow-hidden rounded-xl border border-border bg-background">
+                    <PartImage
+                      partName={p.part_name}
+                      refValue={p.reference_image}
+                      alt={p.part_name}
+                      className="h-24 w-full bg-muted object-contain p-2"
+                    />
+                    <div className="p-4">
+                      <p className="type-body-m font-semibold text-foreground">{p.part_name}</p>
+                      <p className="metric-s mt-2 text-brand-blue">{pct}%</p>
+                      <p className="type-caption mt-1 text-muted-foreground">
+                        {rows.length} inspections · {okRows} OK
+                      </p>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-brand-blue" style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
                   </div>
                 );

@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { PartImage } from "@/components/common/PartImage";
 import { SectionCard } from "@/components/common/SectionCard";
-import { StatusBadge } from "@/components/common/StatusBadge";
-import { StorageImage } from "@/components/common/StorageImage";
 import { useParts } from "@/hooks/useInspectionData";
 
 export const Route = createFileRoute("/_authenticated/parts")({
@@ -28,7 +27,12 @@ function PartsPage() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {parts.map((p) => (
             <div key={p.id} className="surface-card overflow-hidden">
-              <StorageImage refValue={p.reference_image} alt={p.part_name} className="h-40 w-full object-cover" fallbackLabel="Reference image" />
+              <PartImage
+                partName={p.part_name}
+                refValue={p.reference_image}
+                alt={p.part_name}
+                className="h-48 w-full object-contain p-3"
+              />
               <div className="p-5">
                 <p className="type-body-m font-semibold text-foreground">{p.part_name}</p>
                 <p className="type-body-s mt-1 text-muted-foreground">{p.description || "No description"}</p>

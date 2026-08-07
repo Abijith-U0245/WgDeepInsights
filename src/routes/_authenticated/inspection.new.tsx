@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { SectionCard } from "@/components/common/SectionCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { StorageImage } from "@/components/common/StorageImage";
+import { PartImage } from "@/components/common/PartImage";
 import { CaptureBoard, type CapturedFrame } from "@/components/inspection/CaptureBoard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -259,11 +259,11 @@ function NewInspectionPage() {
                         : "border-border bg-background hover:border-brand-blue/40 hover:shadow-card",
                     )}
                   >
-                    <StorageImage
+                    <PartImage
+                      partName={p.part_name}
                       refValue={p.reference_image}
                       alt={p.part_name}
-                      className="size-16 shrink-0 rounded-lg object-cover"
-                      fallbackLabel="Part"
+                      className="size-16 shrink-0 rounded-lg object-contain p-1"
                     />
                     <div className="min-w-0">
                       <p className="type-body-m font-semibold text-foreground">{p.part_name}</p>
@@ -356,21 +356,13 @@ function NewInspectionPage() {
               )}
             </SectionCard>
 
-            <SectionCard title="Reference" subtitle="Geometry and surface references">
-              <div className="space-y-3">
-                <StorageImage
-                  refValue={part?.geometry_image}
-                  alt="Geometry reference"
-                  className="h-32 w-full rounded-lg object-cover"
-                  fallbackLabel="Geometry reference"
-                />
-                <StorageImage
-                  refValue={part?.surface_reference}
-                  alt="Surface reference"
-                  className="h-32 w-full rounded-lg object-cover"
-                  fallbackLabel="Surface reference"
-                />
-              </div>
+            <SectionCard title="Reference" subtitle="Part reference imagery">
+              <PartImage
+                partName={part?.part_name ?? ""}
+                refValue={part?.reference_image}
+                alt={part?.part_name ?? "Part reference"}
+                className="h-48 w-full rounded-lg object-contain p-2"
+              />
             </SectionCard>
           </div>
         )}
