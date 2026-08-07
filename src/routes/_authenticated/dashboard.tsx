@@ -22,6 +22,7 @@ import {
   Clock,
   Crosshair,
   Plus,
+  ScanEye,
   ScanLine,
   TrendingDown,
   TrendingUp,
@@ -37,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useInspections, useParts } from "@/hooks/useInspectionData";
 import { formatTime, isToday, passRate } from "@/lib/inspection-utils";
+import { PART_DESCRIPTORS, getPartDescriptor } from "@/lib/part-descriptors";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -118,7 +120,6 @@ function DashboardPage() {
 
   const accuracy = today.length === 0 ? 0 : Math.min(99.9, 96.4 + rate / 40);
   const isInspector = role === "inspector";
-  const selectedParts = ["Stud", "Adapter", "CapNut", "Pin"];
 
   return (
     <AppShell
@@ -156,38 +157,47 @@ function DashboardPage() {
         >
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="rounded-xl border border-border bg-background p-4 lg:col-span-2">
-              <p className="type-caption uppercase tracking-wide text-muted-foreground">Workflow</p>
-              {isManager ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {[
-                    ["Part history", "Browse date-wise and part-wise inspection history."],
-                    ["Reports", "Filter and download reports when needed."],
-                    ["Models", "Add and manage model files for backend analysis."],
-                    ["Specifications", "Maintain tolerances and expected values."],
-                  ].map(([title, text]) => (
-                    <div key={title} className="rounded-lg border border-border p-3">
-                      <p className="type-body-m font-semibold text-foreground">{title}</p>
-                      <p className="type-body-s mt-1 text-muted-foreground">{text}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {selectedParts.map((name) => (
-                    <div key={name} className="overflow-hidden rounded-lg border border-border">
-                      <PartImage
-                        partName={name}
-                        alt={name}
-                        className="h-28 w-full bg-muted object-contain p-2"
+              <div className="flex items-center justify-between">
+                <p className="type-caption uppercase tracking-wide text-muted-foreground">
+                  {isManager ? "Inspected Part Families" : "Workflow — Select a Part"}
+                </p>
+                <Link
+                  to="/parts"
+                  className="type-caption font-medium text-brand-blue-interactive hover:underline"
+                >
+                  View all →
+                </Link>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {PART_DESCRIPTORS.map((d) => (
+                  <div key={d.key} className="group overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-md">
+                    <div className="relative overflow-hidden">
+                      <img
+                        src={d.photo}
+                        alt={`${d.name} part photograph`}
+                        className="h-32 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        loading="lazy"
                       />
-                      <div className="p-3">
-                        <p className="type-body-m font-semibold text-foreground">{name}</p>
-                        <p className="type-body-s mt-1 text-muted-foreground">Choose a model, then measure and inspect.</p>
-                      </div>
+                      <span className="absolute left-2 top-2 rounded-full bg-background/80 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground backdrop-blur-sm">
+                        {d.partNumber}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="p-3">
+                      <p className="type-body-m font-semibold text-foreground">{d.name}</p>
+                      <p className="type-body-s mt-0.5 text-muted-foreground line-clamp-1">{d.tagline}</p>
+                      {isManager ? (
+                        <p className="type-caption mt-1.5 text-muted-foreground/70 line-clamp-2">
+                          {d.inspectionFocus[0]}
+                        </p>
+                      ) : (
+                        <p className="type-caption mt-1.5 text-muted-foreground/70">
+                          {d.category}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="rounded-xl border border-border bg-background p-4">
               <p className="type-caption uppercase tracking-wide text-muted-foreground">Quick actions</p>
@@ -426,22 +436,38 @@ function DashboardPage() {
         </div>
 
         {isManager && (
-          <SectionCard title="Measurement Statistics" subtitle="Deviation spread by part family">
+          <SectionCard
+            title="Measurement Statistics"
+            subtitle="Pass rate by part family · click a part for full analysis"
+            action={
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/parts">Part Catalogue →</Link>
+              </Button>
+            }
+          >
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {parts.map((p) => {
-                const rows = inspections.filter((i) => i.part_id === p.id);
+              {/* Use static descriptors so cards always appear even with no DB rows */}
+              {PART_DESCRIPTORS.map((d) => {
+                const dbPart = parts.find((p) => getPartDescriptor(p.part_name)?.key === d.key);
+                const rows = dbPart ? inspections.filter((i) => i.part_id === dbPart.id) : [];
                 const okRows = rows.filter((r) => r.status === "ok").length;
                 const pct = rows.length ? Math.round((okRows / rows.length) * 100) : 0;
                 return (
-                  <div key={p.id} className="overflow-hidden rounded-xl border border-border bg-background">
-                    <PartImage
-                      partName={p.part_name}
-                      refValue={p.reference_image}
-                      alt={p.part_name}
-                      className="h-24 w-full bg-muted object-contain p-2"
-                    />
+                  <Link key={d.key} to="/parts" className="group block overflow-hidden rounded-xl border border-border bg-background transition-shadow hover:shadow-lg">
+                    <div className="relative overflow-hidden">
+                      <img
+                        src={d.photo}
+                        alt={`${d.name} photograph`}
+                        className="h-28 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      <span className="absolute left-2 top-2 rounded-full bg-background/75 px-2 py-0.5 text-[10px] text-muted-foreground backdrop-blur-sm">
+                        {d.partNumber}
+                      </span>
+                    </div>
                     <div className="p-4">
-                      <p className="type-body-m font-semibold text-foreground">{p.part_name}</p>
+                      <p className="type-body-m font-semibold text-foreground">{d.name}</p>
+                      <p className="type-body-s mt-0.5 text-muted-foreground line-clamp-1">{d.tagline}</p>
                       <p className="metric-s mt-2 text-brand-blue">{pct}%</p>
                       <p className="type-caption mt-1 text-muted-foreground">
                         {rows.length} inspections · {okRows} OK
@@ -449,8 +475,13 @@ function DashboardPage() {
                       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
                         <div className="h-full rounded-full bg-brand-blue" style={{ width: `${pct}%` }} />
                       </div>
+                      {/* Primary inspection focus */}
+                      <p className="mt-3 type-caption text-muted-foreground/70 line-clamp-2 border-t border-border pt-2">
+                        <ScanEye className="inline size-3 mr-1" />
+                        {d.inspectionFocus[0]}
+                      </p>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
