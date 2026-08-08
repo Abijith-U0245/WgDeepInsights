@@ -149,7 +149,7 @@ function SpecificationsPage() {
                           <tr key={s.id}>
                             <td className="px-2 py-2 type-body-m font-medium text-foreground">{s.parameter}</td>
                             <td className="px-2 py-2 type-body-m tabular">{s.expected_value}</td>
-                            <td className="px-2 py-2 type-body-m tabular">±{s.tolerance}</td>
+                            <td className="px-2 py-2 type-body-m tabular">{s.tolerance > 0 ? `±${s.tolerance}` : "—"}</td>
                             <td className="px-2 py-2 type-body-m">{s.unit}</td>
                             <td className="px-2 py-2 type-body-m text-muted-foreground">{s.notes || "—"}</td>
                           </tr>

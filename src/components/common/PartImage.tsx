@@ -1,4 +1,4 @@
-import { partImageUrl } from "@/lib/part-images";
+import { partImageUrl, partPhotoUrl } from "@/lib/part-images";
 import { StorageImage } from "@/components/common/StorageImage";
 import { cn } from "@/lib/utils";
 
@@ -8,14 +8,16 @@ export function PartImage({
   alt,
   className,
   fallbackLabel,
+  usePhoto = false,
 }: {
   partName: string;
   refValue?: string | null;
   alt: string;
   className?: string;
   fallbackLabel?: string;
+  usePhoto?: boolean;
 }) {
-  const localSrc = partImageUrl(partName);
+  const localSrc = usePhoto ? partPhotoUrl(partName) : partImageUrl(partName);
 
   if (localSrc) {
     return (
