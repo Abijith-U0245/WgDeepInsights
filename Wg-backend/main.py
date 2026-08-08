@@ -15,6 +15,7 @@ POST /run-test/{part}             → run both → final verdict + analytics JSO
 import asyncio
 import base64
 import time
+import contextlib
 import cv2
 import numpy as np
 
@@ -25,7 +26,18 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from camera_manager import CameraManager
 from part_runners import run_measurement, run_inspection
 
-app = FastAPI(title="WGDeepInsight Inspection API", version="1.0.0")
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: open cameras. Shutdown: close cameras."""
+    print("[API] Initialising camera manager…")
+    mgr = CameraManager.instance()
+    print(f"[API] Cameras: {'ready' if mgr.ready else 'DEMO MODE'}")
+    yield
+    CameraManager.instance().shutdown()
+
+
+app = FastAPI(title="WGDeepInsight Inspection API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -182,17 +194,3 @@ async def run_test(part: str):
         "side_inspect_b64": inspect_res["side_annotated_b64"],
         "duration_ms":      int((time.time() - started) * 1000),
     })
-
-
-# ── startup / shutdown ─────────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def startup():
-    print("[API] Initialising camera manager…")
-    mgr = CameraManager.instance()
-    print(f"[API] Cameras: {'ready' if mgr.ready else 'DEMO MODE'}")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    CameraManager.instance().shutdown()
