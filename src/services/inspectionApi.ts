@@ -79,11 +79,13 @@ export async function checkBackendHealth(): Promise<"ready" | "demo" | "offline"
 
 /** Returns the MJPEG URL for the live camera feed. Use as <img src={...} /> */
 export function measureStreamUrl(partName: string): string {
-  return `${PY_API}/stream/${encodeURIComponent(partName.toLowerCase())}/measure`;
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/stream/${encodeURIComponent(partName.toLowerCase())}/measure`;
 }
 
 export function inspectStreamUrl(partName: string): string {
-  return `${PY_API}/stream/${encodeURIComponent(partName.toLowerCase())}/inspect`;
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/stream/${encodeURIComponent(partName.toLowerCase())}/inspect`;
 }
 
 // ── Trigger calls ──────────────────────────────────────────────────────────

@@ -103,6 +103,8 @@ function NewInspectionPage() {
   const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
   const [testResult, setTestResult] = useState<RunTestResult | null>(null);
   const [running, setRunning] = useState<"measure" | "inspect" | "test" | "save" | null>(null);
+  const [measureRuns, setMeasureRuns] = useState<MeasureResult[]>([]);
+  const [inspectRuns, setInspectRuns] = useState<InspectResult[]>([]);
 
   // Live feed mode: "measure" shows measurement stream, "inspect" shows YOLO stream
   const [feedMode, setFeedMode] = useState<"measure" | "inspect">("measure");
@@ -134,14 +136,23 @@ function NewInspectionPage() {
     checkBackendHealth().then(setBackendStatus);
   }, [step]);
 
+  // Reset results if part changes
+  useEffect(() => {
+    setMeasureResult(null);
+    setInspectResult(null);
+    setTestResult(null);
+    setMeasureRuns([]);
+    setInspectRuns([]);
+  }, [partId]);
+
   async function handleMeasure() {
     if (!part) return;
     setRunning("measure");
-    setMeasureResult(null);
     try {
       const res = await triggerMeasure(part.part_name);
       setMeasureResult(res);
-      toast.success(`Measurement complete — ${res.status}`);
+      setMeasureRuns((prev) => [...prev, res]);
+      toast.success(`Measurement capture ${measureRuns.length + 1} complete — ${res.status}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Measurement failed");
     } finally {
@@ -152,12 +163,12 @@ function NewInspectionPage() {
   async function handleInspect() {
     if (!part) return;
     setRunning("inspect");
-    setInspectResult(null);
     setFeedMode("inspect");
     try {
       const res = await triggerInspect(part.part_name);
       setInspectResult(res);
-      toast.success(`Surface inspection complete — ${res.status}`);
+      setInspectRuns((prev) => [...prev, res]);
+      toast.success(`Surface inspection capture ${inspectRuns.length + 1} complete — ${res.status}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Inspection failed");
     } finally {
@@ -167,15 +178,42 @@ function NewInspectionPage() {
 
   async function handleRunTest() {
     if (!part) return;
+    if (measureRuns.length === 0 && inspectRuns.length === 0) {
+      toast.error("Please capture at least one measurement or inspection frame first.");
+      return;
+    }
     setRunning("test");
-    setTestResult(null);
     try {
-      const res = await runFullTest(part.part_name);
+      // Aggregate measurements from all runs
+      const allMeasurements = measureRuns.flatMap((r) => r.measurements);
+      // Aggregate defects from all runs
+      const allDefects = inspectRuns.flatMap((r) => r.defects);
+
+      const allMeasuresPass = allMeasurements.length > 0 ? allMeasurements.every((m) => m.pass) : true;
+      const hasDefects = allDefects.length > 0;
+      const verdict = (allMeasuresPass && !hasDefects) ? "ok" : "reject";
+
+      const latestMeasure = measureRuns[measureRuns.length - 1];
+      const latestInspect = inspectRuns[inspectRuns.length - 1];
+
+      const res: RunTestResult = {
+        verdict,
+        measure_status: allMeasuresPass ? "PASS" : "FAIL",
+        inspect_status: hasDefects ? "reject" : "pass",
+        measurements: allMeasurements,
+        defects: allDefects,
+        top_measure_b64: latestMeasure?.top_annotated_b64 || "",
+        side_measure_b64: latestMeasure?.side_annotated_b64 || "",
+        top_inspect_b64: latestInspect?.top_annotated_b64 || "",
+        side_inspect_b64: latestInspect?.side_annotated_b64 || "",
+        duration_ms: measureRuns.reduce((acc, r) => acc + r.duration_ms, 0) + inspectRuns.reduce((acc, r) => acc + r.duration_ms, 0),
+      };
+
       setTestResult(res);
-      const emoji = res.verdict === "ok" ? "✅" : "❌";
-      toast.success(`${emoji} Full test complete — ${res.verdict.toUpperCase()}`);
+      const emoji = verdict === "ok" ? "✅" : "❌";
+      toast.success(`${emoji} Model evaluation complete — ${verdict.toUpperCase()}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Full test failed");
+      toast.error("Failed to compile runs");
     } finally {
       setRunning(null);
     }
@@ -186,12 +224,17 @@ function NewInspectionPage() {
     setRunning("save");
     try {
       const now = new Date();
+      // Ensure model_id resolves to a valid DB UUID or null (to prevent RLS/FK constraint violations)
+      const dbModelId = models.find((m) => m.id === modelId)?.id || null;
+      // Ensure part_id is a valid DB UUID or null (failsafe for fallback string IDs like "part-4")
+      const dbPartId = partId && !partId.startsWith("part-") ? partId : null;
+
       const { data: inspection, error } = await supabase
         .from("inspections")
         .insert({
           inspector_id: user.id,
-          part_id: partId,
-          model_id: modelId,
+          part_id: dbPartId,
+          model_id: dbModelId,
           inspection_date: now.toISOString().slice(0, 10),
           inspection_time: now.toTimeString().slice(0, 8),
           shift,
@@ -223,13 +266,24 @@ function NewInspectionPage() {
         );
       }
 
-      // Upload captured top and side views to storage
-      const imagesToUpload = [
-        { b64: testResult.top_measure_b64, type: "measurement_top" },
-        { b64: testResult.side_measure_b64, type: "measurement_side" },
-        { b64: testResult.top_inspect_b64, type: "defect_top" },
-        { b64: testResult.side_inspect_b64, type: "defect_side" },
-      ];
+      // Upload captured top and side views to storage from ALL runs
+      const imagesToUpload: Array<{ b64: string; type: string }> = [];
+      measureRuns.forEach((run, idx) => {
+        if (run.top_annotated_b64) {
+          imagesToUpload.push({ b64: run.top_annotated_b64, type: `measurement_top_${idx + 1}` });
+        }
+        if (run.side_annotated_b64) {
+          imagesToUpload.push({ b64: run.side_annotated_b64, type: `measurement_side_${idx + 1}` });
+        }
+      });
+      inspectRuns.forEach((run, idx) => {
+        if (run.top_annotated_b64) {
+          imagesToUpload.push({ b64: run.top_annotated_b64, type: `defect_top_${idx + 1}` });
+        }
+        if (run.side_annotated_b64) {
+          imagesToUpload.push({ b64: run.side_annotated_b64, type: `defect_side_${idx + 1}` });
+        }
+      });
 
       for (const img of imagesToUpload) {
         if (!img.b64) continue;
@@ -256,8 +310,9 @@ function NewInspectionPage() {
       await queryClient.invalidateQueries({ queryKey: ["inspections"] });
       toast.success(`Saved ${inspection.inspection_number as string}`);
       void navigate({ to: "/report/$id", params: { id: inspectionId } });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save inspection");
+    } catch (e: any) {
+      console.error("Save error details:", e);
+      toast.error(e?.message || (typeof e === "string" ? e : "Could not save inspection"));
     } finally {
       setRunning(null);
     }
@@ -496,7 +551,6 @@ function NewInspectionPage() {
                   alt="Live camera feed — top and side view"
                   className="w-full rounded-xl border border-border object-contain bg-muted"
                   style={{ maxHeight: 320 }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
                 <div className="flex h-52 w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/30">
@@ -517,8 +571,8 @@ function NewInspectionPage() {
                 disabled={running !== null || backendStatus === "offline"}
                 className={cn(
                   "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
-                  measureResult
-                    ? measureResult.status === "PASS"
+                  measureRuns.length > 0
+                    ? measureRuns.every((r) => r.status === "PASS")
                       ? "border-emerald-500/50 bg-emerald-500/10"
                       : "border-rose-500/50 bg-rose-500/10"
                     : "border-border bg-card hover:border-brand-blue/50 hover:bg-brand-blue-subtle",
@@ -527,8 +581,8 @@ function NewInspectionPage() {
               >
                 {running === "measure" ? (
                   <Loader2 className="size-10 animate-spin text-brand-blue" />
-                ) : measureResult ? (
-                  measureResult.status === "PASS"
+                ) : measureRuns.length > 0 ? (
+                  measureRuns.every((r) => r.status === "PASS")
                     ? <CheckCircle2 className="size-10 text-emerald-400" />
                     : <XCircle className="size-10 text-rose-400" />
                 ) : (
@@ -536,12 +590,17 @@ function NewInspectionPage() {
                 )}
                 <div>
                   <p className="type-body-m font-bold text-foreground">📷 Capture & Measure</p>
-                  <p className="type-caption text-muted-foreground mt-1">Snapshot → dimensional analysis</p>
-                  {measureResult && (
+                  <p className="type-caption text-muted-foreground mt-1">
+                    {measureRuns.length > 0 
+                      ? `Captured: ${measureRuns.length} run(s) (${measureRuns.length * 2} frames)`
+                      : "Snapshot → dimensional analysis"
+                    }
+                  </p>
+                  {measureRuns.length > 0 && (
                     <span className={cn("mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold",
-                      measureResult.status === "PASS" ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
+                      measureRuns.every((r) => r.status === "PASS") ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
                     )}>
-                      {measureResult.status}
+                      {measureRuns.every((r) => r.status === "PASS") ? "ALL PASS" : "FAIL ENCOUNTERED"}
                     </span>
                   )}
                 </div>
@@ -554,8 +613,8 @@ function NewInspectionPage() {
                 disabled={running !== null || backendStatus === "offline"}
                 className={cn(
                   "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
-                  inspectResult
-                    ? inspectResult.status === "pass"
+                  inspectRuns.length > 0
+                    ? inspectRuns.every((r) => r.status === "pass")
                       ? "border-emerald-500/50 bg-emerald-500/10"
                       : "border-rose-500/50 bg-rose-500/10"
                     : "border-border bg-card hover:border-rose-500/50 hover:bg-rose-500/5",
@@ -564,8 +623,8 @@ function NewInspectionPage() {
               >
                 {running === "inspect" ? (
                   <Loader2 className="size-10 animate-spin text-rose-400" />
-                ) : inspectResult ? (
-                  inspectResult.status === "pass"
+                ) : inspectRuns.length > 0 ? (
+                  inspectRuns.every((r) => r.status === "pass")
                     ? <CheckCircle2 className="size-10 text-emerald-400" />
                     : <XCircle className="size-10 text-rose-400" />
                 ) : (
@@ -573,18 +632,23 @@ function NewInspectionPage() {
                 )}
                 <div>
                   <p className="type-body-m font-bold text-foreground">🔍 Capture & Inspect</p>
-                  <p className="type-caption text-muted-foreground mt-1">Snapshot → YOLO surface defects</p>
-                  {inspectResult && (
+                  <p className="type-caption text-muted-foreground mt-1">
+                    {inspectRuns.length > 0
+                      ? `Captured: ${inspectRuns.length} run(s) (${inspectRuns.length * 2} frames)`
+                      : "Snapshot → YOLO surface defects"
+                    }
+                  </p>
+                  {inspectRuns.length > 0 && (
                     <span className={cn("mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold",
-                      inspectResult.status === "pass" ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
+                      inspectRuns.every((r) => r.status === "pass") ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
                     )}>
-                      {inspectResult.status === "pass" ? "NO DEFECTS" : `${inspectResult.defects.length} DEFECT(S)`}
+                      {inspectRuns.every((r) => r.status === "pass") ? "NO DEFECTS" : `${inspectRuns.reduce((acc, r) => acc + r.defects.length, 0)} DEFECT(S)`}
                     </span>
                   )}
                 </div>
               </button>
 
-              {/* Run Full Test */}
+              {/* Run Model Evaluation */}
               <button
                 id="btn-run-test"
                 onClick={handleRunTest}
@@ -609,8 +673,8 @@ function NewInspectionPage() {
                   <PlayCircle className="size-10 text-brand-blue transition-transform duration-200 group-hover:scale-110" />
                 )}
                 <div>
-                  <p className="type-body-m font-bold text-foreground">▶ Run Full Test</p>
-                  <p className="type-caption text-muted-foreground mt-1">Measure + Inspect → final verdict</p>
+                  <p className="type-body-m font-bold text-foreground">▶ Run Model Evaluation</p>
+                  <p className="type-caption text-muted-foreground mt-1">Compile all captured frames → final verdict</p>
                   {testResult && (
                     <span className={cn("mt-2 inline-block rounded-full px-3 py-0.5 text-sm font-bold",
                       testResult.verdict === "ok" ? "bg-emerald-500/25 text-emerald-300" : "bg-rose-500/25 text-rose-300"

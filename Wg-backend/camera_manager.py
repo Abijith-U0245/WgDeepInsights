@@ -103,19 +103,13 @@ class CameraManager:
             cam.MV_CC_SetBoolValue("AcquisitionFrameRateEnable", True)
             cam.MV_CC_SetFloatValue("AcquisitionFrameRate", 15.0)
             cam.MV_CC_SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF)
-            cam.MV_CC_SetEnumValue("ExposureAuto", 0)
-            cam.MV_CC_SetEnumValue("GainAuto", 0)
 
             if serial == TOP_CAM_SERIAL:
-                cam.MV_CC_SetFloatValue("ExposureTime", 3000.0)
-                cam.MV_CC_SetFloatValue("Gain", 1.0)
                 cam.MV_CC_StartGrabbing()
                 self._cameras["top"] = cam
                 print(f"[CAM] Top camera ready  ({serial})")
 
             elif serial == SIDE_CAM_SERIAL:
-                cam.MV_CC_SetFloatValue("ExposureTime", 35000.0)
-                cam.MV_CC_SetFloatValue("Gain", 5.3132)
                 cam.MV_CC_StartGrabbing()
                 self._cameras["side"] = cam
                 print(f"[CAM] Side camera ready ({serial})")
