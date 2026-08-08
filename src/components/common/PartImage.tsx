@@ -32,7 +32,7 @@ export function PartImage({
     <StorageImage
       refValue={refValue}
       alt={alt}
-      className={className}
+      className={className ?? ""}
       fallbackLabel={fallbackLabel ?? "Reference image"}
     />
   );

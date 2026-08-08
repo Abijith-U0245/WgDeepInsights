@@ -355,7 +355,7 @@ function NewInspectionPage() {
             <SectionCard title="Reference" subtitle="Part reference imagery">
               <PartImage
                 partName={part?.part_name ?? ""}
-                refValue={part?.reference_image}
+                refValue={part?.reference_image ?? null}
                 alt={part?.part_name ?? "Part reference"}
                 className="h-48 w-full rounded-lg object-contain p-2"
               />
