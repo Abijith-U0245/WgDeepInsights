@@ -12,4 +12,16 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      proxy: {
+        // /py-api/* → FastAPI backend on localhost:8000
+        "/py-api": {
+          target: "http://localhost:8000",
+          rewrite: (path) => path.replace(/^\/py-api/, ""),
+          changeOrigin: true,
+        },
+      },
+    },
+  },
 });

@@ -1,17 +1,25 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { motion } from "motion/react";
+import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Camera,
   Check,
+  CheckCircle2,
   Cpu,
   FileText,
   Loader2,
+  PlayCircle,
   Ruler,
+  ScanEye,
   ScanLine,
   ShieldAlert,
+  Wifi,
+  WifiOff,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,7 +27,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { SectionCard } from "@/components/common/SectionCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PartImage } from "@/components/common/PartImage";
-import { CaptureBoard, type CapturedFrame } from "@/components/inspection/CaptureBoard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -37,10 +44,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { uploadFile } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import {
-  runInspection,
-  runMeasurement,
-  type DefectRow,
-  type MeasurementRow,
+  checkBackendHealth,
+  measureStreamUrl,
+  inspectStreamUrl,
+  triggerMeasure,
+  triggerInspect,
+  runFullTest,
+  toSupabaseMeasurement,
+  toSupabaseDefect,
+  type MeasureResult,
+  type InspectResult,
+  type RunTestResult,
 } from "@/services/inspectionApi";
 
 export const Route = createFileRoute("/_authenticated/inspection/new")({
@@ -80,86 +94,92 @@ function NewInspectionPage() {
   const [area, setArea] = useState("Line A");
   const [shift, setShift] = useState("A");
   const [remarks, setRemarks] = useState("");
-  const [measureFrames, setMeasureFrames] = useState<CapturedFrame[]>([]);
-  const [surfaceFrames, setSurfaceFrames] = useState<CapturedFrame[]>([]);
-  const [measurements, setMeasurements] = useState<MeasurementRow[] | null>(null);
-  const [defects, setDefects] = useState<DefectRow[] | null>(null);
-  const [running, setRunning] = useState<"measure" | "inspect" | "save" | null>(null);
+
+  // Backend connection status
+  const [backendStatus, setBackendStatus] = useState<"ready" | "demo" | "offline" | "checking">("checking");
+
+  // Results from each stage
+  const [measureResult, setMeasureResult] = useState<MeasureResult | null>(null);
+  const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
+  const [testResult, setTestResult] = useState<RunTestResult | null>(null);
+  const [running, setRunning] = useState<"measure" | "inspect" | "test" | "save" | null>(null);
+
+  // Live feed mode: "measure" shows measurement stream, "inspect" shows YOLO stream
+  const [feedMode, setFeedMode] = useState<"measure" | "inspect">("measure");
 
   const { data: parts = [] } = useParts();
   const { data: models = [] } = useModels();
   const { data: specs = [] } = useSpecifications(partId || undefined);
 
   const part = parts.find((p) => p.id === partId);
-  const model = models.find((m) => m.id === modelId);
   const partModels = useMemo(
     () => models.filter((m) => !m.part_id || m.part_id === partId),
     [models, partId],
   );
 
-  const measurementStatus = measurements
-    ? measurements.every((m) => m.status === "pass")
-      ? "pass"
-      : "fail"
+  // Derived final verdict
+  const finalStatus: "ok" | "reject" | null = testResult
+    ? testResult.verdict
     : null;
-  const defectStatus = defects
-    ? defects.every((d) => d.status === "pass")
-      ? "pass"
-      : "reject"
-    : null;
-  const finalStatus =
-    measurementStatus && defectStatus
-      ? measurementStatus === "pass" && defectStatus === "pass"
-        ? "ok"
-        : "reject"
-      : null;
 
   const canNext = [Boolean(partId), Boolean(modelId), specs.length >= 0, false][step];
 
+  // Check backend health when entering step 3
+  useEffect(() => {
+    if (step !== 3) return;
+    setBackendStatus("checking");
+    checkBackendHealth().then(setBackendStatus);
+  }, [step]);
+
   async function handleMeasure() {
-    if (!partId || !modelId) return;
+    if (!part) return;
     setRunning("measure");
+    setMeasureResult(null);
     try {
-      const res = await runMeasurement({
-        partId,
-        modelId,
-        images: measureFrames.map((f) => f.file.name),
-        specifications: specs.map((s) => ({
-          parameter: s.parameter,
-          expected: Number(s.expected_value),
-          tolerance: Number(s.tolerance),
-          unit: s.unit,
-        })),
-      });
-      setMeasurements(res.results);
-      toast.success(`Measurement complete — ${res.status.toUpperCase()}`);
-    } catch {
-      toast.error("Measurement service unavailable");
+      const res = await triggerMeasure(part.part_name);
+      setMeasureResult(res);
+      toast.success(`Measurement complete — ${res.status}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Measurement failed");
     } finally {
       setRunning(null);
     }
   }
 
   async function handleInspect() {
-    if (!partId || !modelId) return;
+    if (!part) return;
     setRunning("inspect");
+    setInspectResult(null);
+    setFeedMode("inspect");
     try {
-      const res = await runInspection({
-        partId,
-        modelId,
-        images: surfaceFrames.map((f) => f.file.name),
-      });
-      setDefects(res.defects);
-      toast.success(`Surface inspection complete — ${res.status.toUpperCase()}`);
-    } catch {
-      toast.error("Surface defect service unavailable");
+      const res = await triggerInspect(part.part_name);
+      setInspectResult(res);
+      toast.success(`Surface inspection complete — ${res.status}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Inspection failed");
+    } finally {
+      setRunning(null);
+    }
+  }
+
+  async function handleRunTest() {
+    if (!part) return;
+    setRunning("test");
+    setTestResult(null);
+    try {
+      const res = await runFullTest(part.part_name);
+      setTestResult(res);
+      const emoji = res.verdict === "ok" ? "✅" : "❌";
+      toast.success(`${emoji} Full test complete — ${res.verdict.toUpperCase()}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Full test failed");
     } finally {
       setRunning(null);
     }
   }
 
   async function handleSave() {
-    if (!user || !finalStatus) return;
+    if (!user || !finalStatus || !testResult) return;
     setRunning("save");
     try {
       const now = new Date();
@@ -173,7 +193,7 @@ function NewInspectionPage() {
           inspection_time: now.toTimeString().slice(0, 8),
           shift,
           area,
-          duration_seconds: 42,
+          duration_seconds: Math.round(testResult.duration_ms / 1000),
           status: finalStatus,
           remarks,
         })
@@ -183,49 +203,25 @@ function NewInspectionPage() {
 
       const inspectionId = inspection.id as string;
 
-      if (measurements?.length) {
+      if (testResult.measurements.length) {
         await supabase.from("measurement_results").insert(
-          measurements.map((m) => ({
+          testResult.measurements.map((m) => ({
             inspection_id: inspectionId,
-            parameter: m.parameter,
-            expected: m.expected,
-            actual: m.actual,
-            deviation: m.deviation,
-            tolerance: m.tolerance,
-            unit: m.unit,
-            status: m.status,
+            ...toSupabaseMeasurement(m),
           })),
         );
       }
-      if (defects?.length) {
+      if (testResult.defects.length) {
         await supabase.from("defect_results").insert(
-          defects.map((d) => ({
+          testResult.defects.map((d) => ({
             inspection_id: inspectionId,
-            defect_name: d.defectName,
-            confidence: d.confidence,
-            annotated_image: d.annotatedImage,
-            status: d.status,
+            ...toSupabaseDefect(d),
           })),
         );
-      }
-
-      const uploads = [
-        ...measureFrames.map((f) => ({ f, type: "measurement" })),
-        ...surfaceFrames.map((f) => ({ f, type: "surface" })),
-      ];
-      if (uploads.length) {
-        const refs = await Promise.all(
-          uploads.map(async ({ f, type }) => ({
-            inspection_id: inspectionId,
-            image_type: type,
-            image_url: await uploadFile("captured-images", f.file, inspectionId),
-          })),
-        );
-        await supabase.from("captured_images").insert(refs);
       }
 
       await queryClient.invalidateQueries({ queryKey: ["inspections"] });
-      toast.success(`Saved ${inspection.inspection_number}`);
+      toast.success(`Saved ${inspection.inspection_number as string}`);
       void navigate({ to: "/report/$id", params: { id: inspectionId } });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save inspection");
@@ -369,114 +365,308 @@ function NewInspectionPage() {
 
         {step === 3 && (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SectionCard title="Dimensional measurement" subtitle="Capture measurement frames">
-                <CaptureBoard
-                  label="Measurement frames"
-                  frames={measureFrames}
-                  onChange={setMeasureFrames}
-                  disabled={running !== null}
-                />
-                <Button
-                  className="mt-4 w-full"
-                  onClick={handleMeasure}
-                  disabled={running !== null || specs.length === 0}
-                >
-                  {running === "measure" ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Ruler className="size-4" />
-                  )}
-                  Run measurement
-                </Button>
 
-                {measurements && (
-                  <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/40">
-                          <Th>Parameter</Th>
-                          <Th>Expected</Th>
-                          <Th>Actual</Th>
-                          <Th>Deviation</Th>
-                          <Th>Status</Th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {measurements.map((m) => (
-                          <tr key={m.parameter}>
-                            <Td className="font-medium text-foreground">{m.parameter}</Td>
-                            <Td className="tabular">
-                              {m.expected} {m.unit}
-                            </Td>
-                            <Td className="tabular">
-                              {m.actual} {m.unit}
-                            </Td>
-                            <Td
-                              className={cn(
-                                "tabular",
-                                m.status === "pass" ? "text-success" : "text-error",
-                              )}
-                            >
-                              {m.deviation > 0 ? "+" : ""}
-                              {m.deviation}
-                            </Td>
-                            <Td>
-                              <StatusBadge status={m.status} />
-                            </Td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </SectionCard>
-
-              <SectionCard title="Surface defect inspection" subtitle="Capture surface frames">
-                <CaptureBoard
-                  label="Surface frames"
-                  frames={surfaceFrames}
-                  onChange={setSurfaceFrames}
-                  disabled={running !== null}
-                />
-                <Button
-                  className="mt-4 w-full"
-                  variant="secondary"
-                  onClick={handleInspect}
-                  disabled={running !== null}
-                >
-                  {running === "inspect" ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <ShieldAlert className="size-4" />
-                  )}
-                  Run surface inspection
-                </Button>
-
-                {defects && (
-                  <ul className="mt-4 space-y-2">
-                    {defects.length === 0 && (
-                      <li className="type-body-m text-success">No surface defects detected.</li>
-                    )}
-                    {defects.map((d) => (
-                      <li
-                        key={d.defectName}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5"
-                      >
-                        <div>
-                          <p className="type-body-m font-medium text-foreground">{d.defectName}</p>
-                          <p className="type-caption text-muted-foreground">
-                            Confidence {(d.confidence * 100).toFixed(1)}%
-                          </p>
-                        </div>
-                        <StatusBadge status={d.status} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </SectionCard>
+            {/* ── Backend status bar ──────────────────────────────────────── */}
+            <div className={cn(
+              "flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium",
+              backendStatus === "ready"    && "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+              backendStatus === "demo"     && "border-amber-500/30  bg-amber-500/10  text-amber-400",
+              backendStatus === "offline"  && "border-rose-500/30   bg-rose-500/10   text-rose-400",
+              backendStatus === "checking" && "border-border bg-muted text-muted-foreground",
+            )}>
+              {backendStatus === "ready"    && <><Wifi className="size-4" /> Python backend connected — cameras ready</>}
+              {backendStatus === "demo"     && <><Wifi className="size-4" /> Python backend connected — DEMO MODE (no cameras)</>}
+              {backendStatus === "offline"  && <><WifiOff className="size-4" /> Backend offline — run <code className="mx-1 font-mono text-xs">Wg-backend/start_server.bat</code> first</>}
+              {backendStatus === "checking" && <><Loader2 className="size-4 animate-spin" /> Connecting to Python backend…</>}
             </div>
 
+            {/* ── Live camera feed strip ──────────────────────────────────── */}
+            <SectionCard
+              title="Live Camera Feeds"
+              subtitle="Top view (left) · Side view (right) — real-time from Hikrobot GigE cameras"
+              action={
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setFeedMode("measure")}
+                    className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
+                      feedMode === "measure" ? "bg-brand-blue text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                    )}
+                  >📐 Measure feed</button>
+                  <button
+                    onClick={() => setFeedMode("inspect")}
+                    className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
+                      feedMode === "inspect" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                    )}
+                  >🔍 Inspect feed</button>
+                </div>
+              }
+            >
+              {backendStatus !== "offline" ? (
+                <img
+                  src={feedMode === "measure"
+                    ? measureStreamUrl(part?.part_name ?? "capnut")
+                    : inspectStreamUrl(part?.part_name ?? "capnut")
+                  }
+                  alt="Live camera feed — top and side view"
+                  className="w-full rounded-xl border border-border object-contain bg-muted"
+                  style={{ maxHeight: 320 }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="flex h-52 w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/30">
+                  <div className="text-center">
+                    <Camera className="mx-auto mb-2 size-10 text-muted-foreground/40" />
+                    <p className="type-body-s text-muted-foreground">Camera feed unavailable — backend offline</p>
+                  </div>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* ── Action buttons ──────────────────────────────────────────── */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              {/* Measure */}
+              <button
+                id="btn-capture-measure"
+                onClick={handleMeasure}
+                disabled={running !== null || backendStatus === "offline"}
+                className={cn(
+                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
+                  measureResult
+                    ? measureResult.status === "PASS"
+                      ? "border-emerald-500/50 bg-emerald-500/10"
+                      : "border-rose-500/50 bg-rose-500/10"
+                    : "border-border bg-card hover:border-brand-blue/50 hover:bg-brand-blue-subtle",
+                  (running !== null || backendStatus === "offline") && "cursor-not-allowed opacity-60",
+                )}
+              >
+                {running === "measure" ? (
+                  <Loader2 className="size-10 animate-spin text-brand-blue" />
+                ) : measureResult ? (
+                  measureResult.status === "PASS"
+                    ? <CheckCircle2 className="size-10 text-emerald-400" />
+                    : <XCircle className="size-10 text-rose-400" />
+                ) : (
+                  <Ruler className="size-10 text-brand-blue transition-transform duration-200 group-hover:scale-110" />
+                )}
+                <div>
+                  <p className="type-body-m font-bold text-foreground">📷 Capture & Measure</p>
+                  <p className="type-caption text-muted-foreground mt-1">Snapshot → dimensional analysis</p>
+                  {measureResult && (
+                    <span className={cn("mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold",
+                      measureResult.status === "PASS" ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
+                    )}>
+                      {measureResult.status}
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              {/* Inspect */}
+              <button
+                id="btn-capture-inspect"
+                onClick={handleInspect}
+                disabled={running !== null || backendStatus === "offline"}
+                className={cn(
+                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
+                  inspectResult
+                    ? inspectResult.status === "pass"
+                      ? "border-emerald-500/50 bg-emerald-500/10"
+                      : "border-rose-500/50 bg-rose-500/10"
+                    : "border-border bg-card hover:border-rose-500/50 hover:bg-rose-500/5",
+                  (running !== null || backendStatus === "offline") && "cursor-not-allowed opacity-60",
+                )}
+              >
+                {running === "inspect" ? (
+                  <Loader2 className="size-10 animate-spin text-rose-400" />
+                ) : inspectResult ? (
+                  inspectResult.status === "pass"
+                    ? <CheckCircle2 className="size-10 text-emerald-400" />
+                    : <XCircle className="size-10 text-rose-400" />
+                ) : (
+                  <ScanEye className="size-10 text-rose-400 transition-transform duration-200 group-hover:scale-110" />
+                )}
+                <div>
+                  <p className="type-body-m font-bold text-foreground">🔍 Capture & Inspect</p>
+                  <p className="type-caption text-muted-foreground mt-1">Snapshot → YOLO surface defects</p>
+                  {inspectResult && (
+                    <span className={cn("mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold",
+                      inspectResult.status === "pass" ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
+                    )}>
+                      {inspectResult.status === "pass" ? "NO DEFECTS" : `${inspectResult.defects.length} DEFECT(S)`}
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              {/* Run Full Test */}
+              <button
+                id="btn-run-test"
+                onClick={handleRunTest}
+                disabled={running !== null || backendStatus === "offline"}
+                className={cn(
+                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
+                  testResult
+                    ? testResult.verdict === "ok"
+                      ? "border-emerald-500/60 bg-emerald-500/15"
+                      : "border-rose-500/60 bg-rose-500/15"
+                    : "border-dashed border-brand-blue/50 bg-brand-blue-subtle hover:border-brand-blue hover:bg-brand-blue/10",
+                  (running !== null || backendStatus === "offline") && "cursor-not-allowed opacity-60",
+                )}
+              >
+                {running === "test" ? (
+                  <Loader2 className="size-10 animate-spin text-brand-blue" />
+                ) : testResult ? (
+                  testResult.verdict === "ok"
+                    ? <CheckCircle2 className="size-10 text-emerald-400" />
+                    : <XCircle className="size-10 text-rose-400" />
+                ) : (
+                  <PlayCircle className="size-10 text-brand-blue transition-transform duration-200 group-hover:scale-110" />
+                )}
+                <div>
+                  <p className="type-body-m font-bold text-foreground">▶ Run Full Test</p>
+                  <p className="type-caption text-muted-foreground mt-1">Measure + Inspect → final verdict</p>
+                  {testResult && (
+                    <span className={cn("mt-2 inline-block rounded-full px-3 py-0.5 text-sm font-bold",
+                      testResult.verdict === "ok" ? "bg-emerald-500/25 text-emerald-300" : "bg-rose-500/25 text-rose-300"
+                    )}>
+                      {testResult.verdict.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </button>
+            </div>
+
+            {/* ── Results panels ──────────────────────────────────────────── */}
+            <AnimatePresence>
+
+              {/* Measurement results */}
+              {measureResult && (
+                <motion.div
+                  key="measure-results"
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                >
+                  <SectionCard
+                    title="Dimensional Measurement Results"
+                    subtitle={`${measureResult.measurements.filter(m=>m.pass).length}/${measureResult.measurements.length} parameters within tolerance · ${measureResult.duration_ms}ms`}
+                  >
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {/* Annotated images */}
+                      <div className="space-y-2">
+                        <p className="type-caption text-muted-foreground">Top View — annotated</p>
+                        <img src={`data:image/jpeg;base64,${measureResult.top_annotated_b64}`}
+                          alt="Top view measurement" className="w-full rounded-lg border border-border object-contain bg-muted" />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="type-caption text-muted-foreground">Side View — annotated</p>
+                        <img src={`data:image/jpeg;base64,${measureResult.side_annotated_b64}`}
+                          alt="Side view measurement" className="w-full rounded-lg border border-border object-contain bg-muted" />
+                      </div>
+                    </div>
+                    {/* Table */}
+                    <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <Th>Parameter</Th><Th>Measured</Th><Th>Expected</Th><Th>Tolerance</Th><Th>Status</Th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {measureResult.measurements.map((m) => {
+                            const dev = Number((m.measured - m.expected).toFixed(4));
+                            return (
+                              <tr key={m.parameter} className={m.pass ? "" : "bg-rose-500/5"}>
+                                <Td className="font-medium">{m.parameter}</Td>
+                                <Td className={cn("tabular font-semibold", m.pass ? "text-emerald-400" : "text-rose-400")}>{m.measured} {m.unit}</Td>
+                                <Td className="tabular text-muted-foreground">{m.expected} {m.unit}</Td>
+                                <Td className="tabular text-muted-foreground">±{m.tolerance} {m.unit}</Td>
+                                <Td>{m.pass ? <CheckCircle2 className="size-4 text-emerald-400" /> : <XCircle className="size-4 text-rose-400" />}</Td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </SectionCard>
+                </motion.div>
+              )}
+
+              {/* Inspect results */}
+              {inspectResult && (
+                <motion.div
+                  key="inspect-results"
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                >
+                  <SectionCard
+                    title="Surface Defect Inspection Results"
+                    subtitle={inspectResult.status === "pass" ? "No defects detected" : `${inspectResult.defects.length} defect(s) found · ${inspectResult.duration_ms}ms`}
+                  >
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <p className="type-caption text-muted-foreground">Top View — YOLO annotated</p>
+                        <img src={`data:image/jpeg;base64,${inspectResult.top_annotated_b64}`}
+                          alt="Top view defect" className="w-full rounded-lg border border-border object-contain bg-muted" />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="type-caption text-muted-foreground">Side View — YOLO annotated</p>
+                        <img src={`data:image/jpeg;base64,${inspectResult.side_annotated_b64}`}
+                          alt="Side view defect" className="w-full rounded-lg border border-border object-contain bg-muted" />
+                      </div>
+                    </div>
+                    {inspectResult.defects.length > 0 && (
+                      <ul className="mt-4 space-y-2">
+                        {inspectResult.defects.map((d, i) => (
+                          <li key={i} className="flex items-center justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2.5">
+                            <div>
+                              <p className="type-body-m font-semibold text-rose-300">{d.name}</p>
+                              <p className="type-caption text-muted-foreground">{d.cam} · Confidence {(d.confidence * 100).toFixed(1)}% · Box [{d.bbox.join(", ")}]</p>
+                            </div>
+                            <AlertTriangle className="size-5 text-rose-400 shrink-0" />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {inspectResult.status === "pass" && (
+                      <p className="mt-3 flex items-center gap-2 type-body-m text-emerald-400">
+                        <CheckCircle2 className="size-5" /> No surface defects detected on either camera.
+                      </p>
+                    )}
+                  </SectionCard>
+                </motion.div>
+              )}
+
+              {/* Full test result verdict */}
+              {testResult && (
+                <motion.div
+                  key="test-result"
+                  initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                >
+                  <div className={cn(
+                    "rounded-2xl border-2 p-6 text-center",
+                    testResult.verdict === "ok" ? "border-emerald-500/60 bg-emerald-500/10" : "border-rose-500/60 bg-rose-500/10",
+                  )}>
+                    {testResult.verdict === "ok" ? (
+                      <CheckCircle2 className="mx-auto mb-3 size-16 text-emerald-400" />
+                    ) : (
+                      <XCircle className="mx-auto mb-3 size-16 text-rose-400" />
+                    )}
+                    <h2 className={cn("text-3xl font-black tracking-tight",
+                      testResult.verdict === "ok" ? "text-emerald-300" : "text-rose-300"
+                    )}>
+                      {testResult.verdict === "ok" ? "✅ PART ACCEPTED" : "❌ PART REJECTED"}
+                    </h2>
+                    <p className="mt-2 type-body-m text-muted-foreground">
+                      Measurement: <span className={testResult.measure_status === "PASS" ? "text-emerald-400" : "text-rose-400"}>{testResult.measure_status}</span>
+                      {" · "}
+                      Defects: <span className={testResult.inspect_status === "pass" ? "text-emerald-400" : "text-rose-400"}>{testResult.inspect_status === "pass" ? "None" : `${testResult.defects.length} found`}</span>
+                      {" · "}
+                      <span className="text-muted-foreground">{testResult.duration_ms}ms</span>
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── Inspection record ───────────────────────────────────────── */}
             <SectionCard title="Inspection record" subtitle="Context saved with this result">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
@@ -486,14 +676,10 @@ function NewInspectionPage() {
                 <div className="space-y-2">
                   <Label htmlFor="shift">Shift</Label>
                   <Select value={shift} onValueChange={setShift}>
-                    <SelectTrigger id="shift">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger id="shift"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {["A", "B", "C"].map((s) => (
-                        <SelectItem key={s} value={s}>
-                          Shift {s}
-                        </SelectItem>
+                        <SelectItem key={s} value={s}>Shift {s}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -504,9 +690,7 @@ function NewInspectionPage() {
                     {finalStatus ? (
                       <StatusBadge status={finalStatus} />
                     ) : (
-                      <span className="type-body-s text-muted-foreground">
-                        Run both analyses to get a verdict
-                      </span>
+                      <span className="type-body-s text-muted-foreground">Run Full Test to get a verdict</span>
                     )}
                   </div>
                 </div>

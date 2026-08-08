@@ -72,10 +72,13 @@ const defaultSpecs = [
     name: "Pin",
     image: PART_REFERENCE_IMAGES.pin,
     measurements: [
-      ["Diameter", "8.00 mm", "± 0.009"],
-      ["Length", "40.00 mm", "± 0.10"],
+      ["OD (Outer Diameter, ØA)", "Ø11.979 mm", "± 0.021"],
+      ["ID (Through hole, ØD — 2 holes)", "Ø3.2 mm", "nominal"],
+      ["Length (L, overall)", "87.6 mm", "± 0.2"],
+      ["Length (C, between hole centers)", "81.2 mm", "± 0.2"],
+      ["Width / Chamfer (B)", "3.2 mm", "—"],
     ],
-    note: "Precision dowel pin, hardened steel, h6 tolerance.",
+    note: "Precision pin with two transverse Ø3.2mm through-holes. OD tolerance class: ± 0.021 mm (h6-style). Overall length 87.6 ± 0.2 mm; hole centre spacing 81.2 ± 0.2 mm.",
   },
 ];
 
