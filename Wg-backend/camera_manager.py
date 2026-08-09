@@ -124,6 +124,65 @@ class CameraManager:
     def ready(self) -> bool:
         return DEMO_MODE or ("top" in self._cameras and "side" in self._cameras)
 
+    def set_parameters(self, part_name: str):
+        """Dynamically configure the exposure and gain for the specified part."""
+        if DEMO_MODE:
+            return
+        
+        key = part_name.lower().replace("-", "").replace(" ", "")
+        
+        # Preset exposure & gain settings for each part
+        presets = {
+            "capnut": {
+                "top_exposure": 3000.0, "top_gain": 1.0,
+                "side_exposure": 35000.0, "side_gain": 5.3132
+            },
+            "stud": {
+                "top_exposure": 3000.0, "top_gain": 1.0,
+                "side_exposure": 30000.0, "side_gain": 5.3132
+            },
+            "adapter": {
+                "top_exposure": 2000.0, "top_gain": 0.0,
+                "side_exposure": 35000.0, "side_gain": 7.0
+            },
+            "adaptor": {
+                "top_exposure": 2000.0, "top_gain": 0.0,
+                "side_exposure": 35000.0, "side_gain": 7.0
+            },
+            "pin": {
+                "top_exposure": 2000.0, "top_gain": 0.0,
+                "side_exposure": 35000.0, "side_gain": 7.3132
+            }
+        }
+        
+        p = presets.get(key)
+        if not p:
+            return
+            
+        with self._cam_lock:
+            top_cam = self._cameras.get("top")
+            side_cam = self._cameras.get("side")
+            
+            if top_cam:
+                try:
+                    top_cam.MV_CC_SetEnumValue("ExposureAuto", 0)
+                    top_cam.MV_CC_SetEnumValue("GainAuto", 0)
+                    top_cam.MV_CC_SetFloatValue("ExposureTime", p["top_exposure"])
+                    top_cam.MV_CC_SetFloatValue("Gain", p["top_gain"])
+                    print(f"[CAM] Set top camera params for {key}: exp={p['top_exposure']}, gain={p['top_gain']}")
+                except Exception as e:
+                    print(f"[CAM] Failed to set top parameters for {key}: {e}")
+                    
+            if side_cam:
+                try:
+                    side_cam.MV_CC_SetEnumValue("ExposureAuto", 0)
+                    side_cam.MV_CC_SetEnumValue("GainAuto", 0)
+                    side_cam.MV_CC_SetFloatValue("ExposureTime", p["side_exposure"])
+                    side_cam.MV_CC_SetFloatValue("Gain", p["side_gain"])
+                    print(f"[CAM] Set side camera params for {key}: exp={p['side_exposure']}, gain={p['side_gain']}")
+                except Exception as e:
+                    print(f"[CAM] Failed to set side parameters for {key}: {e}")
+
     def _grab_one(self, which: str) -> np.ndarray | None:
         cam = self._cameras.get(which)
         if cam is None:

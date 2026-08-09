@@ -82,6 +82,7 @@ def _annotate_live_measure(part: str, top: np.ndarray, side: np.ndarray) -> tupl
 async def _mjpeg_generator(part: str):
     """Yields multipart MJPEG frames (top and side stacked side-by-side)."""
     mgr = CameraManager.instance()
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, part)
     while True:
         top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
         top_d, side_d = _annotate_live_measure(part, top, side)
@@ -121,6 +122,7 @@ async def trigger_measure(part: str):
     key = _normalise(part)
     mgr = CameraManager.instance()
     started = time.time()
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
     top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
     result = await asyncio.get_event_loop().run_in_executor(
         None, run_measurement, key, top, side
@@ -135,6 +137,7 @@ async def trigger_inspect(part: str):
     key = _normalise(part)
     mgr = CameraManager.instance()
     started = time.time()
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
     top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
     result = await asyncio.get_event_loop().run_in_executor(
         None, run_inspection, key, top, side
@@ -168,6 +171,7 @@ async def run_test(part: str):
     started = time.time()
 
     # Grab one frame pair — reused for both analyses
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
     top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
 
     loop = asyncio.get_event_loop()
