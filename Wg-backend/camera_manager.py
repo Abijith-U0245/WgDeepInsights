@@ -99,9 +99,9 @@ class CameraManager:
             if int(pkt) > 0:
                 cam.MV_CC_SetIntValue("GevSCPSPacketSize", pkt)
 
-            cam.MV_CC_SetIntValue("GevSCPD", 1000)
+            cam.MV_CC_SetIntValue("GevSCPD", 3000)
             cam.MV_CC_SetBoolValue("AcquisitionFrameRateEnable", True)
-            cam.MV_CC_SetFloatValue("AcquisitionFrameRate", 15.0)
+            cam.MV_CC_SetFloatValue("AcquisitionFrameRate", 5.0)
             cam.MV_CC_SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF)
 
             if serial == TOP_CAM_SERIAL:
@@ -189,9 +189,10 @@ class CameraManager:
             return None
         with self._cam_lock:
             ret = cam.MV_CC_GetOneFrameTimeout(
-                ctypes.byref(self._data_buf), BUF_SIZE, self._frame_info, 2000
+                ctypes.byref(self._data_buf), BUF_SIZE, self._frame_info, 1000
             )
             if ret != 0:
+                print(f"[CAM] GetOneFrameTimeout {which} failed: {hex(ret)}")
                 return None
             h = self._frame_info.nHeight
             w = self._frame_info.nWidth

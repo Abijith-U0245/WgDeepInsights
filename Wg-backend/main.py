@@ -93,7 +93,7 @@ async def _mjpeg_generator(part: str):
             + buf.tobytes()
             + b"\r\n"
         )
-        await asyncio.sleep(1 / 15)  # ~15 fps
+        await asyncio.sleep(1 / 5)  # ~5 fps (prevents CPU spike / packet queue jam)
 
 
 @app.get("/stream/{part}/measure")
