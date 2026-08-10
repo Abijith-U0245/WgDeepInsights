@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   BookOpen,
@@ -8,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Layers,
+  Plus,
   Ruler,
   ScanEye,
   Settings2,
@@ -21,9 +24,22 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { SectionCard } from "@/components/common/SectionCard";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useParts } from "@/hooks/useInspectionData";
 import { PART_DESCRIPTORS, getPartDescriptor, type PartDescriptor } from "@/lib/part-descriptors";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/parts")({
   head: () => ({
@@ -45,16 +61,80 @@ const TONE_STYLES = {
 };
 
 function PartsPage() {
+  const queryClient = useQueryClient();
   const { data: parts = [] } = useParts();
   const [selected, setSelected] = useState<PartDescriptor | null>(null);
   const [imgMode, setImgMode] = useState<"photo" | "drawing">("photo");
   const [expandedSpec, setExpandedSpec] = useState<string | null>(null);
 
+  // Add Part State
+  const [addOpen, setAddOpen] = useState(false);
+  const [newPartName, setNewPartName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleAddPart(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newPartName.trim()) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("parts")
+        .insert({
+          part_name: newPartName.trim(),
+          description: newDescription.trim(),
+        });
+      if (error) throw error;
+      toast.success(`Part family "${newPartName}" added successfully.`);
+      setNewPartName("");
+      setNewDescription("");
+      setAddOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["parts"] });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to add part.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // Merge DB parts with local descriptors; fallback to static descriptors for demo
   const displayParts = PART_DESCRIPTORS;
 
   return (
-    <AppShell title="Parts" subtitle="Part families · reference imagery · descriptive analysis">
+    <AppShell 
+      title="Parts" 
+      subtitle="Part families · reference imagery · descriptive analysis"
+      actions={
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm">
+              <Plus className="mr-2 size-4" /> Add Part
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Part Family</DialogTitle>
+              <DialogDescription>Create a new mechanical part family to store specifications and run AI models.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddPart} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="partName">Part Name</Label>
+                <Input id="partName" placeholder="e.g. Pin, Bolt, Flange" required value={newPartName} onChange={(e) => setNewPartName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea id="description" placeholder="Describe the part and its function..." value={newDescription} onChange={(e) => setNewDescription(e.target.value)} />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={submitting}>Add Part</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      }
+    >
       {/* Hero grid — part cards */}
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {displayParts.map((d, i) => {

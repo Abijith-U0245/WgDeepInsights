@@ -109,11 +109,11 @@ function NewInspectionPage() {
   // Live feed mode: "measure" shows measurement stream, "inspect" shows YOLO stream
   const [feedMode, setFeedMode] = useState<"measure" | "inspect">("measure");
 
-  const { data: parts = [] } = useParts();
+  const { data: parts = [], error: partsError, isLoading: partsLoading } = useParts();
   const part = parts.find((p) => p.id === partId);
 
-  const { data: models = [] } = useModels(undefined, part?.part_name);
-  const { data: specs = [] } = useSpecifications(partId || undefined, part?.part_name);
+  const { data: models = [], error: modelsError, isLoading: modelsLoading } = useModels(undefined, part?.part_name);
+  const { data: specs = [], error: specsError, isLoading: specsLoading } = useSpecifications(partId || undefined, part?.part_name);
 
   // Instead of showing 2 separate DB models, we unify them in the UI
   const unifiedModelId = partId ? `${partId}-unified` : "";
@@ -325,7 +325,14 @@ function NewInspectionPage() {
 
         {step === 0 && (
           <SectionCard title="Select part" subtitle="Choose the part family being inspected">
-            {parts.length === 0 ? (
+            {partsLoading ? (
+              <p className="type-body-m text-muted-foreground animate-pulse py-6">Loading part families from database...</p>
+            ) : partsError ? (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-500">
+                <p className="type-body-m font-semibold">Failed to load parts:</p>
+                <p className="type-body-s mt-1 font-mono">{(partsError as Error)?.message || "Database connection error"}</p>
+              </div>
+            ) : parts.length === 0 ? (
               <p className="type-body-m text-muted-foreground">
                 No parts configured yet. Ask an inspection manager to add parts first.
               </p>
@@ -370,6 +377,13 @@ function NewInspectionPage() {
               <p className="type-body-m text-muted-foreground">
                 Please select a part first.
               </p>
+            ) : modelsLoading ? (
+              <p className="type-body-m text-muted-foreground animate-pulse py-6">Loading AI models from database...</p>
+            ) : modelsError ? (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-500">
+                <p className="type-body-m font-semibold">Failed to load models:</p>
+                <p className="type-body-s mt-1 font-mono">{(modelsError as Error)?.message || "Database connection error"}</p>
+              </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <button
@@ -406,6 +420,23 @@ function NewInspectionPage() {
         )}
 
         {step === 2 && (() => {
+          if (specsLoading) {
+            return (
+              <SectionCard title="Specification" subtitle="Loading tolerances...">
+                <p className="type-body-m text-muted-foreground animate-pulse py-6">Retrieving dimensions from database...</p>
+              </SectionCard>
+            );
+          }
+          if (specsError) {
+            return (
+              <SectionCard title="Specification" subtitle="Tolerances error">
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-500">
+                  <p className="type-body-m font-semibold">Failed to load specifications:</p>
+                  <p className="type-body-s mt-1 font-mono">{(specsError as Error)?.message || "Database connection error"}</p>
+                </div>
+              </SectionCard>
+            );
+          }
           // Bulletproof UI fallback for specs
           let displaySpecs: any[] = specs;
           if (displaySpecs.length === 0 && part?.part_name) {

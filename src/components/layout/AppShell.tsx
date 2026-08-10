@@ -37,7 +37,7 @@ const NAV: NavItem[] = [
   { to: "/analytics", label: "Analytics", icon: BarChart3, managerOnly: true },
   { to: "/history", label: "History", icon: History },
   { to: "/models", label: "Models", icon: Cpu, managerOnly: true },
-  { to: "/specifications", label: "Specifications", icon: Ruler, managerOnly: true },
+  { to: "/specifications", label: "Specifications", icon: Ruler },
   { to: "/parts", label: "Parts", icon: Box, managerOnly: true },
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/users", label: "Users", icon: Users, managerOnly: true },
@@ -62,7 +62,10 @@ export function AppShell({
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  const items = NAV.filter((item) => !item.managerOnly || isManager);
+  const items = NAV.filter((item) => {
+    if (isManager && item.to === "/inspection") return false;
+    return !item.managerOnly || isManager;
+  });
   const initials = (name || user?.email || "U").slice(0, 1).toUpperCase();
 
   async function signOut() {

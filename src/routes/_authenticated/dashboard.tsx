@@ -126,12 +126,14 @@ function DashboardPage() {
       title="Dashboard"
       subtitle={`Welcome back${name ? `, ${name}` : ""} · shopfloor quality overview`}
       actions={
-        <Button asChild size="sm">
-          <Link to="/inspection/new">
-            <Plus className="size-4" />
-            New Inspection
-          </Link>
-        </Button>
+        !isManager && (
+          <Button asChild size="sm">
+            <Link to="/inspection/new">
+              <Plus className="size-4" />
+              New Inspection
+            </Link>
+          </Button>
+        )
       }
     >
       <div className="space-y-5">
@@ -202,7 +204,6 @@ function DashboardPage() {
             <div className="rounded-xl border border-border bg-background p-4">
               <p className="type-caption uppercase tracking-wide text-muted-foreground">Quick actions</p>
               <div className="mt-3 space-y-2">
-                <Button asChild className="w-full justify-start" variant="outline"><Link to="/inspection/new">New inspection</Link></Button>
                 {isManager ? (
                   <>
                     <Button asChild className="w-full justify-start" variant="outline"><Link to="/history">Open history</Link></Button>
@@ -210,6 +211,7 @@ function DashboardPage() {
                   </>
                 ) : (
                   <>
+                    <Button asChild className="w-full justify-start" variant="outline"><Link to="/inspection/new">New inspection</Link></Button>
                     <Button asChild className="w-full justify-start" variant="outline"><Link to="/reports">View report</Link></Button>
                     <Button asChild className="w-full justify-start" variant="outline"><Link to="/history">My history</Link></Button>
                   </>

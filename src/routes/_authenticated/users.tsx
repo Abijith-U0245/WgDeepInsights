@@ -1,9 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Plus, Users } from "lucide-react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { SectionCard } from "@/components/common/SectionCard";
-import { StatusBadge } from "@/components/common/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useProfiles } from "@/hooks/useInspectionData";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/users")({
   head: () => ({
@@ -18,13 +35,105 @@ export const Route = createFileRoute("/_authenticated/users")({
 });
 
 function UsersPage() {
+  const queryClient = useQueryClient();
   const { data: people = [] } = useProfiles();
+
+  // Add User State
+  const [addOpen, setAddOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("inspector");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleAddUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+    setSubmitting(true);
+    try {
+      // Generate a valid UUID format for profiles
+      const newUserId = window.crypto ? window.crypto.randomUUID() : "user-" + Date.now();
+      
+      // 1. Insert profile
+      const { error: profileErr } = await supabase
+        .from("profiles")
+        .insert({
+          id: newUserId,
+          name: name.trim(),
+          email: email.trim(),
+        });
+      if (profileErr) throw profileErr;
+
+      // 2. Insert user role
+      const { error: roleErr } = await supabase
+        .from("user_roles")
+        .insert({
+          user_id: newUserId,
+          role: role as "inspector" | "inspection_manager",
+        });
+      if (roleErr) throw roleErr;
+
+      toast.success(`User "${name}" added successfully.`);
+      setName("");
+      setEmail("");
+      setRole("inspector");
+      setAddOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to add user.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <AppShell title="Users" subtitle="Team directory and access levels">
+    <AppShell 
+      title="Users" 
+      subtitle="Team directory and access levels"
+      actions={
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm">
+              <Plus className="mr-2 size-4" /> Add User
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Team Member</DialogTitle>
+              <DialogDescription>Create a new profile for an Inspector or Inspection Manager.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddUser} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="userName">Full Name</Label>
+                <Input id="userName" placeholder="e.g. John Doe" required value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input id="email" type="email" placeholder="e.g. john@wgtech.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">System Role</Label>
+                <Select value={role} onValueChange={setRole}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inspector">Inspector (Shopfloor Operator)</SelectItem>
+                    <SelectItem value="inspection_manager">Inspection Manager (Admin)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={submitting}>Add User</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      }
+    >
       <SectionCard bodyClassName="p-0">
         <ul className="divide-y divide-border">
           {people.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-4 px-5 py-4">
+            <li key={p.id} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-muted/10 transition-colors">
               <div className="flex items-center gap-3">
                 <span className="flex size-10 items-center justify-center rounded-full bg-brand-blue-subtle type-body-m font-semibold text-brand-blue">
                   {(p.name || p.email || "?").slice(0, 1).toUpperCase()}
