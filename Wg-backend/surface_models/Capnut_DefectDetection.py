@@ -22,15 +22,19 @@ SIDE_GAIN = 5.3132
 # =====================================================================
 # 3. IMPORT SDK & LOAD AI
 # =====================================================================
-sys.path.append(r"C:\Program Files (x86)\MVS\Development\Samples\Python")
-sys.path.append(r"./MvImport") 
+# MVS SDK path — only needed on Windows LAP with Hikrobot MVS installed.
+# On Linux/SBU this import is skipped (camera access is via RTSP in this deployment).
+MVS_SDK_PATH = r"C:\Program Files (x86)\MVS\Development\Samples\Python"
+import os as _os; _os.path.exists(MVS_SDK_PATH) and sys.path.append(MVS_SDK_PATH)
+sys.path.append(str(__import__('pathlib').Path(__file__).resolve().parent.parent / "MvImport"))
 try:
     from MvImport.MvCameraControl_class import *
 except ImportError:
     print("[ERROR] Could not find MvImport.")
     sys.exit()
 
-model = YOLO(r"C:\Users\abiji\deepinsight\Wg-backend\surface_models\Capnut_best.pt")
+_MODEL_DIR = __import__('pathlib').Path(__file__).resolve().parent
+model = YOLO(str(_MODEL_DIR / "Capnut_best.pt"))
 
 # =====================================================================
 # 4. INITIALIZE CAMERAS & LOCK BY SERIAL NUMBER

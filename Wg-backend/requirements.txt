@@ -1,6 +1,8 @@
 fastapi
 uvicorn[standard]
-opencv-python
+# Use opencv-python-headless on SBU (no display/GUI needed).
+# On LAP with a monitor, you can use opencv-python instead.
+opencv-python-headless
 numpy
 ultralytics
 python-multipart
