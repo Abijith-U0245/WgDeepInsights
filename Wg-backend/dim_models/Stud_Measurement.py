@@ -1,24 +1,14 @@
 import sys
 import cv2
 import numpy as np
-import ctypes
 from ultralytics import YOLO
 
-# =====================================================================
-# 1. HARDWARE ROUTING
-# =====================================================================
-TOP_CAM_INDEX = 0  
-SIDE_CAM_INDEX = 1   
+# 1. IMPORT DEEPAK'S CAMERA MANAGER
+from camera_manager import CameraManager
 
 # =====================================================================
 # 2. CALIBRATION & CAMERA SETTINGS
 # =====================================================================
-TOP_EXPOSURE = 3000.0   
-TOP_GAIN = 1.0        
-
-SIDE_EXPOSURE = 30000.0 
-SIDE_GAIN = 5.3132         
-
 # 📏 PIXEL-TO-MM (PMM) FINAL PERFECT CALIBRATION
 PMM_CAM_TOP    = 33.24  
 PMM_CAM_SIDE_Y = 31.57  
@@ -31,82 +21,15 @@ SIDE_HEIGHT_MIN = 37.30
 SIDE_HEIGHT_MAX = 38.90 
 
 # =====================================================================
-# 3. IMPORT SDK & LOAD AI
+# 3. LOAD AI MODEL (RELATIVE PATH FOR SBC)
 # =====================================================================
-sys.path.append(r"C:\Program Files (x86)\MVS\Development\Samples\Python")
-sys.path.append(r"./MvImport") 
-try:
-    from MvImport.MvCameraControl_class import *
-except ImportError:
-    print("[ERROR] Could not find MvImport.")
-    sys.exit()
+model = YOLO("surface_models/Stud_best.pt")
 
-model = YOLO(r"C:\Users\abiji\deepinsight\Wg-backend\surface_models\Stud_best.pt")
+# Initialize the central camera manager
+cam_mgr = CameraManager.instance()
 
 # =====================================================================
-# 4. INITIALIZE CAMERAS & LOCK BY SERIAL NUMBER
-# =====================================================================
-TOP_CAM_SERIAL = "DA5211006"  
-SIDE_CAM_SERIAL = "DA4265515" 
-
-deviceList = MV_CC_DEVICE_INFO_LIST()
-ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, deviceList)
-
-if ret != 0 or deviceList.nDeviceNum < 2:
-    print("[ERROR] Need 2 Hikrobot cameras for this dual setup!")
-    sys.exit()
-
-camera_dict = {}
-
-for i in range(deviceList.nDeviceNum):
-    stDeviceList = ctypes.cast(deviceList.pDeviceInfo[i], ctypes.POINTER(MV_CC_DEVICE_INFO)).contents
-    
-    serial_num = ""
-    if stDeviceList.nTLayerType == MV_GIGE_DEVICE:
-        for per in stDeviceList.SpecialInfo.stGigEInfo.chSerialNumber:
-            if per == 0: break
-            serial_num += chr(per)
-            
-    cam = MvCamera()
-    cam.MV_CC_CreateHandle(stDeviceList)
-    cam.MV_CC_OpenDevice(MV_ACCESS_Exclusive, 0)
-    
-    nPacketSize = cam.MV_CC_GetOptimalPacketSize()
-    if int(nPacketSize) > 0: 
-        cam.MV_CC_SetIntValue("GevSCPSPacketSize", nPacketSize)
-        
-    cam.MV_CC_SetIntValue("GevSCPD", 1000) 
-    cam.MV_CC_SetBoolValue("AcquisitionFrameRateEnable", True)
-    cam.MV_CC_SetFloatValue("AcquisitionFrameRate", 15.0) 
-    cam.MV_CC_SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF)
-    
-    cam.MV_CC_SetEnumValue("ExposureAuto", 0) 
-    cam.MV_CC_SetEnumValue("GainAuto", 0)
-    
-    if serial_num == TOP_CAM_SERIAL:
-        cam.MV_CC_SetFloatValue("ExposureTime", TOP_EXPOSURE) 
-        cam.MV_CC_SetFloatValue("Gain", TOP_GAIN)
-        camera_dict[TOP_CAM_INDEX] = cam
-        
-    elif serial_num == SIDE_CAM_SERIAL:
-        cam.MV_CC_SetFloatValue("ExposureTime", SIDE_EXPOSURE) 
-        cam.MV_CC_SetFloatValue("Gain", SIDE_GAIN)
-        camera_dict[SIDE_CAM_INDEX] = cam
-
-if len(camera_dict) < 2:
-    print("[ERROR] Could not find BOTH serial numbers. Check your cameras!")
-    sys.exit()
-    
-cameras = [camera_dict[0], camera_dict[1]]
-
-for cam in cameras:
-    cam.MV_CC_StartGrabbing()
-
-data_buf = (ctypes.c_ubyte * (4000 * 3000 * 3))() 
-stFrameInfo = MV_FRAME_OUT_INFO_EX()
-
-# =====================================================================
-# 5. STUD MEASUREMENT LOGIC
+# 4. STUD MEASUREMENT LOGIC
 # =====================================================================
 def measure_top_view(full_img, pmm, ai_box):
     gray = cv2.cvtColor(full_img, cv2.COLOR_BGR2GRAY)
@@ -209,85 +132,80 @@ def measure_side_view(full_img, pmm_y, ai_box):
     return height_mm, thread_count, status, box_data, peaks_y_coords
 
 # =====================================================================
-# 6. MAIN LOOP
+# 5. MAIN LOOP
 # =====================================================================
-print("\n[INFO] FINAL STUD SCRIPT RUNNING (MEASUREMENT ONLY). Press 'q' to quit.")
+print("\n[INFO] FINAL STUD MEASUREMENT (VIA CAMERA MANAGER) RUNNING. Press 'q' to quit.")
 
 while True:
-    ai_frames = [None, None] 
+    # --- GRAB FRAMES FROM MANAGER (Handles reconnects & demo mode) ---
+    frame_top, frame_side = cam_mgr.grab_pair()
     
-    for idx, cam in enumerate(cameras):
-        ret = cam.MV_CC_GetOneFrameTimeout(ctypes.byref(data_buf), len(data_buf), stFrameInfo, 1000)
+    ai_frames = [None, None] 
+    feeds = [
+        (0, "CAM (TOP VIEW)", frame_top),
+        (1, "CAM (SIDE VIEW)", frame_side)
+    ]
+    
+    for idx, name, frame_bgr in feeds:
+        if frame_bgr is None:
+            continue
+            
+        # --- YOLO AI RUNS IN BACKGROUND (PLOTTING DISABLED) ---
+        results = model(frame_bgr, stream=True, verbose=False, conf=0.4) 
+        annotated_frame = frame_bgr.copy()
         
-        if ret == 0:
-            h, w, frame_len = stFrameInfo.nHeight, stFrameInfo.nWidth, stFrameInfo.nFrameLen
-            raw_data = np.frombuffer(data_buf, count=frame_len, dtype=np.uint8)
+        ai_box = None
+        for r in results:
+            if len(r.boxes) > 0:
+                ai_box = r.boxes.xyxy.cpu().numpy()[0] 
+        
+        hud_status, hud_line1, hud_line2 = "", "", ""
+        hud_color = (0, 255, 0)
+        
+        if idx == 0: # TOP VIEW
+            od_mm, status, circle_id = measure_top_view(frame_bgr, PMM_CAM_TOP, ai_box)
             
-            if frame_len == h * w:
-                frame_bgr = cv2.cvtColor(raw_data.reshape((h, w)), cv2.COLOR_BayerBG2BGR) 
-            else:
-                frame_bgr = raw_data.reshape((h, w, 3))
+            hud_color = (0, 255, 0) if status == "PASS" else (0, 0, 255)
             
-            # --- YOLO AI RUNS IN BACKGROUND (PLOTTING DISABLED) ---
-            results = model(frame_bgr, stream=True, verbose=False, conf=0.4) 
-            annotated_frame = frame_bgr.copy()
-            
-            ai_box = None
-            for r in results:
-                # The line `annotated_frame = r.plot()` has been entirely removed
-                if len(r.boxes) > 0:
-                    ai_box = r.boxes.xyxy.cpu().numpy()[0] 
-            
-            hud_status, hud_line1, hud_line2 = "", "", ""
-            hud_color = (0, 255, 0)
-            name = ""
-            
-            if idx == TOP_CAM_INDEX: 
-                name = "CAM (TOP VIEW)"
-                od_mm, status, circle_id = measure_top_view(frame_bgr, PMM_CAM_TOP, ai_box)
+            if circle_id is not None:
+                cx_in, cy_in, r_in = circle_id
+                cv2.circle(annotated_frame, (cx_in, cy_in), r_in, (255, 0, 255), 4)
                 
+            hud_status = f"STATUS: {status}"
+            hud_line1 = f"OD (7.9mm): {od_mm:.2f}mm"
+
+            display_frame = cv2.resize(annotated_frame, (640, 480))
+            cv2.putText(display_frame, f"ACTIVE: {name}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            if hud_status != "":
+                cv2.putText(display_frame, hud_status, (10, 420), cv2.FONT_HERSHEY_SIMPLEX, 1.0, hud_color, 2)
+                cv2.putText(display_frame, hud_line1, (10, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+            
+            ai_frames[0] = display_frame
+
+        elif idx == 1: # SIDE VIEW
+            height, thread_count, status, box_data, peaks = measure_side_view(frame_bgr, PMM_CAM_SIDE_Y, ai_box)
+            
+            if box_data is not None:
+                bx, by, bw, bh = box_data
                 hud_color = (0, 255, 0) if status == "PASS" else (0, 0, 255)
                 
-                if circle_id is not None:
-                    cx_in, cy_in, r_in = circle_id
-                    cv2.circle(annotated_frame, (cx_in, cy_in), r_in, (255, 0, 255), 4)
-                    
+                cv2.rectangle(annotated_frame, (bx, by), (bx + bw, by + bh), hud_color, 4)
+                
+                for py in peaks:
+                    cv2.line(annotated_frame, (bx, py), (bx + bw, py), (0, 255, 255), 1)
+                
                 hud_status = f"STATUS: {status}"
-                hud_line1 = f"OD (7.9mm): {od_mm:.2f}mm"
+                hud_line1 = f"Total Height: {height:.2f}mm"
+                hud_line2 = f"Threads Count: {thread_count}"
 
-                display_frame = cv2.resize(annotated_frame, (640, 480))
-                cv2.putText(display_frame, f"ACTIVE: {name}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                if hud_status != "":
-                    cv2.putText(display_frame, hud_status, (10, 420), cv2.FONT_HERSHEY_SIMPLEX, 1.0, hud_color, 2)
-                    cv2.putText(display_frame, hud_line1, (10, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-                
-                ai_frames[0] = display_frame
-
-            elif idx == SIDE_CAM_INDEX: 
-                name = "CAM (SIDE VIEW)"
-                height, thread_count, status, box_data, peaks = measure_side_view(frame_bgr, PMM_CAM_SIDE_Y, ai_box)
-                
-                if box_data is not None:
-                    bx, by, bw, bh = box_data
-                    hud_color = (0, 255, 0) if status == "PASS" else (0, 0, 255)
-                    
-                    cv2.rectangle(annotated_frame, (bx, by), (bx + bw, by + bh), hud_color, 4)
-                    
-                    for py in peaks:
-                        cv2.line(annotated_frame, (bx, py), (bx + bw, py), (0, 255, 255), 1)
-                    
-                    hud_status = f"STATUS: {status}"
-                    hud_line1 = f"Total Height: {height:.2f}mm"
-                    hud_line2 = f"Threads Count: {thread_count}"
-
-                display_frame = cv2.resize(annotated_frame, (640, 480))
-                cv2.putText(display_frame, f"ACTIVE: {name}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                if hud_status != "":
-                    cv2.putText(display_frame, hud_status, (10, 370), cv2.FONT_HERSHEY_SIMPLEX, 1.0, hud_color, 2)
-                    cv2.putText(display_frame, hud_line1, (10, 405), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-                    cv2.putText(display_frame, hud_line2, (10, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2) 
-                
-                ai_frames[1] = display_frame
+            display_frame = cv2.resize(annotated_frame, (640, 480))
+            cv2.putText(display_frame, f"ACTIVE: {name}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            if hud_status != "":
+                cv2.putText(display_frame, hud_status, (10, 370), cv2.FONT_HERSHEY_SIMPLEX, 1.0, hud_color, 2)
+                cv2.putText(display_frame, hud_line1, (10, 405), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                cv2.putText(display_frame, hud_line2, (10, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2) 
+            
+            ai_frames[1] = display_frame
 
     if ai_frames[0] is not None and ai_frames[1] is not None:
         stacked_feed = np.hstack([ai_frames[0], ai_frames[1]])
@@ -296,9 +214,6 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-for cam in cameras:
-    cam.MV_CC_StopGrabbing()
-    cam.MV_CC_CloseDevice()
-    cam.MV_CC_DestroyHandle()
-
+# Safely release the RTSP streams
+cam_mgr.shutdown()
 cv2.destroyAllWindows()
