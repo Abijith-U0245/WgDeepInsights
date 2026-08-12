@@ -36,7 +36,7 @@ const NAV: NavItem[] = [
   { to: "/inspection", label: "Inspection", icon: ClipboardCheck },
   { to: "/analytics", label: "Analytics", icon: BarChart3, managerOnly: true },
   { to: "/history", label: "History", icon: History },
-  { to: "/models", label: "Models", icon: Cpu, managerOnly: true },
+  { to: "/models", label: "Programs", icon: Cpu, managerOnly: true },
   { to: "/specifications", label: "Specifications", icon: Ruler },
   { to: "/parts", label: "Parts", icon: Box, managerOnly: true },
   { to: "/reports", label: "Reports", icon: FileText },

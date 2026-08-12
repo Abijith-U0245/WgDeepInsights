@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Cpu,
   FileText,
+  Info,
   Loader2,
   PlayCircle,
   Ruler,
@@ -38,6 +39,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useModels, useParts, useSpecifications } from "@/hooks/useInspectionData";
 import { supabase } from "@/integrations/supabase/client";
@@ -77,10 +86,8 @@ export const Route = createFileRoute("/_authenticated/inspection/new")({
 });
 
 const STEPS = [
-  { label: "Part", icon: ScanLine },
-  { label: "Model", icon: Cpu },
-  { label: "Specification", icon: Ruler },
-  { label: "Measure & Inspect", icon: FileText },
+  { label: "Select Part", icon: ScanLine },
+  { label: "Capture & Inspect", icon: Camera },
 ];
 
 function NewInspectionPage() {
@@ -98,16 +105,22 @@ function NewInspectionPage() {
   // Backend connection status
   const [backendStatus, setBackendStatus] = useState<"ready" | "demo" | "offline" | "checking">("checking");
 
-  // Results from each stage
-  const [measureResult, setMeasureResult] = useState<MeasureResult | null>(null);
-  const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
-  const [testResult, setTestResult] = useState<RunTestResult | null>(null);
-  const [running, setRunning] = useState<"measure" | "inspect" | "test" | "save" | null>(null);
-  const [measureRuns, setMeasureRuns] = useState<MeasureResult[]>([]);
-  const [inspectRuns, setInspectRuns] = useState<InspectResult[]>([]);
+  // Captured runs list (combining both measure and inspect)
+  const [testRuns, setTestRuns] = useState<RunTestResult[]>([]);
+  const [running, setRunning] = useState<"inspect" | "save" | null>(null);
 
-  // Live feed mode: "measure" shows measurement stream, "inspect" shows YOLO stream
+  // Selected run index for detail view
+  const [selectedRunIdx, setSelectedRunIdx] = useState<number>(0);
+
+  // Toggle for images in detail view: "measure" or "inspect" (defect)
+  const [detailImageMode, setDetailImageMode] = useState<"measure" | "inspect">("measure");
+
+  // Live feed stream mode (measure or inspect)
   const [feedMode, setFeedMode] = useState<"measure" | "inspect">("measure");
+
+  // Dialog state for specifications popup
+  const [activeSpecPart, setActiveSpecPart] = useState<any | null>(null);
+  const [isSpecDialogOpen, setIsSpecDialogOpen] = useState(false);
 
   const { data: parts = [], error: partsError, isLoading: partsLoading } = useParts();
   const part = parts.find((p) => p.id === partId);
@@ -115,60 +128,46 @@ function NewInspectionPage() {
   const { data: models = [], error: modelsError, isLoading: modelsLoading } = useModels(undefined, part?.part_name);
   const { data: specs = [], error: specsError, isLoading: specsLoading } = useSpecifications(partId || undefined, part?.part_name);
 
-  // Instead of showing 2 separate DB models, we unify them in the UI
-  const unifiedModelId = partId ? `${partId}-unified` : "";
-  const partModels = useMemo(
-    () => models.filter((m) => !m.part_id || m.part_id === partId),
-    [models, partId],
-  );
-
-  // Derived final verdict
-  const finalStatus: "ok" | "reject" | null = testResult
-    ? testResult.verdict
-    : null;
-
-  const canNext = [Boolean(partId), Boolean(modelId), specs.length >= 0, false][step];
-
-  // Check backend health when entering step 3
+  // Auto-select model ID in background
   useEffect(() => {
-    if (step !== 3) return;
+    if (partId && models.length > 0) {
+      const matchingModel = models.find((m) => m.part_id === partId);
+      if (matchingModel) {
+        setModelId(matchingModel.id);
+      } else {
+        setModelId(`${partId}-unified`);
+      }
+    }
+  }, [partId, models]);
+
+  // Check backend health when entering step 1
+  useEffect(() => {
+    if (step !== 1) return;
     setBackendStatus("checking");
     checkBackendHealth().then(setBackendStatus);
   }, [step]);
 
   // Reset results if part changes
   useEffect(() => {
-    setMeasureResult(null);
-    setInspectResult(null);
-    setTestResult(null);
-    setMeasureRuns([]);
-    setInspectRuns([]);
+    setTestRuns([]);
+    setSelectedRunIdx(0);
   }, [partId]);
 
-  async function handleMeasure() {
+  async function handleInspectPart() {
     if (!part) return;
-    setRunning("measure");
-    try {
-      const res = await triggerMeasure(part.part_name);
-      setMeasureResult(res);
-      setMeasureRuns((prev) => [...prev, res]);
-      toast.success(`Measurement capture ${measureRuns.length + 1} complete — ${res.status}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Measurement failed");
-    } finally {
-      setRunning(null);
+    if (testRuns.length >= 5) {
+      toast.error("Maximum 5 captures reached for this inspection.");
+      return;
     }
-  }
-
-  async function handleInspect() {
-    if (!part) return;
     setRunning("inspect");
-    setFeedMode("inspect");
     try {
-      const res = await triggerInspect(part.part_name);
-      setInspectResult(res);
-      setInspectRuns((prev) => [...prev, res]);
-      toast.success(`Surface inspection capture ${inspectRuns.length + 1} complete — ${res.status}`);
+      const res = await runFullTest(part.part_name);
+      setTestRuns((prev) => {
+        const next = [...prev, res];
+        setSelectedRunIdx(next.length - 1); // auto-select the latest run
+        return next;
+      });
+      toast.success(`Check ${testRuns.length + 1} complete.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Inspection failed");
     } finally {
@@ -176,58 +175,74 @@ function NewInspectionPage() {
     }
   }
 
-  async function handleRunTest() {
-    if (!part) return;
-    if (measureRuns.length === 0 && inspectRuns.length === 0) {
-      toast.error("Please capture at least one measurement or inspection frame first.");
-      return;
+  // Compile final results across all captured runs
+  const allMeasurements = useMemo(() => testRuns.flatMap((r) => r.measurements), [testRuns]);
+  const allDefects = useMemo(() => testRuns.flatMap((r) => r.defects), [testRuns]);
+
+  const allMeasuresPass = useMemo(() => 
+    allMeasurements.length > 0 ? allMeasurements.every((m) => m.pass) : true
+  , [allMeasurements]);
+  
+  const hasDefects = useMemo(() => allDefects.length > 0, [allDefects]);
+  
+  const finalStatus = useMemo(() => 
+    testRuns.length > 0 ? (allMeasuresPass && !hasDefects ? "ok" : "reject") : null
+  , [testRuns, allMeasuresPass, hasDefects]);
+
+  const canNext = [Boolean(partId), false][step];
+
+  const activeSpecs = useMemo(() => {
+    if (!activeSpecPart) return [];
+    const partSpecs = specs.filter((s) => s.part_id === activeSpecPart.id);
+    if (partSpecs.length > 0) return partSpecs;
+
+    const staticSpecs = [
+      { id: "c1", part_id: "part-1", parameter: "OD - Across Flats (hex)", expected_value: 36, tolerance: 0, unit: "mm", notes: "+0 / -0.62" },
+      { id: "c2", part_id: "part-1", parameter: "OD - Across Corners (hex max)", expected_value: 39, tolerance: 0, unit: "mm", notes: "" },
+      { id: "c3", part_id: "part-1", parameter: "Overall Height", expected_value: 17.5, tolerance: 0, unit: "mm", notes: "+0 / -0.1" },
+      { id: "c4", part_id: "part-1", parameter: "ID - Internal Thread", expected_value: 16, tolerance: 0, unit: "mm", notes: "M16 x 1.5 blind end" },
+      { id: "c5", part_id: "part-1", parameter: "Bore Step Ø1", expected_value: 17.15, tolerance: 0.20, unit: "mm", notes: "" },
+      { id: "c6", part_id: "part-1", parameter: "Bore Step Ø2", expected_value: 14.575, tolerance: 0.075, unit: "mm", notes: "" },
+      { id: "c7", part_id: "part-1", parameter: "Bore Step Ø3", expected_value: 10.675, tolerance: 0.075, unit: "mm", notes: "" },
+      { id: "c8", part_id: "part-1", parameter: "Bore Step Ø4 (thread minor)", expected_value: 9.575, tolerance: 0.075, unit: "mm", notes: "" },
+      { id: "c9", part_id: "part-1", parameter: "Boss / Collar OD (Detail Y)", expected_value: 21.9, tolerance: 0, unit: "mm", notes: "" },
+      { id: "c10", part_id: "part-1", parameter: "Boss / Collar ID (Detail Y)", expected_value: 7.8, tolerance: 0, unit: "mm", notes: "" },
+      { id: "c11", part_id: "part-1", parameter: "Shoulder OD (Section G-G)", expected_value: 34.7, tolerance: 0, unit: "mm", notes: "" },
+      { id: "c12", part_id: "part-1", parameter: "Male Thread Boss Diameter", expected_value: 25.40, tolerance: 0.05, unit: "mm", notes: "" },
+      { id: "c13", part_id: "part-1", parameter: "Male Thread", expected_value: 28.57, tolerance: 0, unit: "mm", notes: "1-1/8\"-12 UNF" },
+      { id: "c14", part_id: "part-1", parameter: "Small Hole Diameter", expected_value: 4.6, tolerance: 0, unit: "mm", notes: "" },
+      { id: "s1", part_id: "part-2", parameter: "Overall Length", expected_value: 38.10, tolerance: 0.8, unit: "mm", notes: "" },
+      { id: "s2", part_id: "part-2", parameter: "Metal-End Length", expected_value: 11.60, tolerance: 0.8, unit: "mm", notes: "" },
+      { id: "s3", part_id: "part-2", parameter: "Nut-End Thread Length", expected_value: 19.30, tolerance: 0, unit: "mm", notes: "" },
+      { id: "s4", part_id: "part-2", parameter: "Shank OD", expected_value: 7.90, tolerance: 0, unit: "mm", notes: "" },
+      { id: "s5", part_id: "part-2", parameter: "Thread (both ends)", expected_value: 7.93, tolerance: 0, unit: "mm", notes: "5/16\"-18 UNC 2A" },
+      { id: "a1", part_id: "part-3", parameter: "OD - Across Flats (hex)", expected_value: 27.00, tolerance: 0, unit: "mm", notes: "Both sides" },
+      { id: "a2", part_id: "part-3", parameter: "Bore / Pilot ID", expected_value: 19.70, tolerance: 0.1, unit: "mm", notes: "" },
+      { id: "a3", part_id: "part-3", parameter: "Groove / Step Width", expected_value: 2.10, tolerance: 0.1, unit: "mm", notes: "" },
+      { id: "a4", part_id: "part-3", parameter: "Thread (both sides)", expected_value: 22.00, tolerance: 0, unit: "mm", notes: "M22 x 1.5" },
+      { id: "p1", part_id: "part-4", parameter: "OD (Outer Diameter ØA)", expected_value: 11.979, tolerance: 0.021, unit: "mm", notes: "" },
+      { id: "p2", part_id: "part-4", parameter: "ID (Through-hole ØD - ×2)", expected_value: 3.20, tolerance: 0, unit: "mm", notes: "" },
+      { id: "p3", part_id: "part-4", parameter: "Length (L, overall)", expected_value: 87.60, tolerance: 0.20, unit: "mm", notes: "" },
+      { id: "p4", part_id: "part-4", parameter: "Length (C, hole centers)", expected_value: 81.20, tolerance: 0.20, unit: "mm", notes: "" },
+      { id: "p5", part_id: "part-4", parameter: "Width/Chamfer (B)", expected_value: 3.20, tolerance: 0, unit: "mm", notes: "" },
+    ];
+    const nameToId: Record<string, string> = { "capnut": "part-1", "stud": "part-2", "adapter": "part-3", "pin": "part-4" };
+    const fallbackId = nameToId[activeSpecPart.part_name.toLowerCase().trim()];
+    if (fallbackId) {
+      return staticSpecs.filter(s => s.part_id === fallbackId);
     }
-    setRunning("test");
-    try {
-      // Aggregate measurements from all runs
-      const allMeasurements = measureRuns.flatMap((r) => r.measurements);
-      // Aggregate defects from all runs
-      const allDefects = inspectRuns.flatMap((r) => r.defects);
-
-      const allMeasuresPass = allMeasurements.length > 0 ? allMeasurements.every((m) => m.pass) : true;
-      const hasDefects = allDefects.length > 0;
-      const verdict = (allMeasuresPass && !hasDefects) ? "ok" : "reject";
-
-      const latestMeasure = measureRuns[measureRuns.length - 1];
-      const latestInspect = inspectRuns[inspectRuns.length - 1];
-
-      const res: RunTestResult = {
-        verdict,
-        measure_status: allMeasuresPass ? "PASS" : "FAIL",
-        inspect_status: hasDefects ? "reject" : "pass",
-        measurements: allMeasurements,
-        defects: allDefects,
-        top_measure_b64: latestMeasure?.top_annotated_b64 || "",
-        side_measure_b64: latestMeasure?.side_annotated_b64 || "",
-        top_inspect_b64: latestInspect?.top_annotated_b64 || "",
-        side_inspect_b64: latestInspect?.side_annotated_b64 || "",
-        duration_ms: measureRuns.reduce((acc, r) => acc + r.duration_ms, 0) + inspectRuns.reduce((acc, r) => acc + r.duration_ms, 0),
-      };
-
-      setTestResult(res);
-      const emoji = verdict === "ok" ? "✅" : "❌";
-      toast.success(`${emoji} Model evaluation complete — ${verdict.toUpperCase()}`);
-    } catch (e) {
-      toast.error("Failed to compile runs");
-    } finally {
-      setRunning(null);
-    }
-  }
+    return [];
+  }, [activeSpecPart, specs]);
 
   async function handleSave() {
-    if (!user || !finalStatus || !testResult) return;
+    if (!user || !finalStatus || testRuns.length === 0) return;
     setRunning("save");
     try {
       const now = new Date();
-      // Ensure model_id resolves to a valid DB UUID or null (to prevent RLS/FK constraint violations)
       const dbModelId = models.find((m) => m.id === modelId)?.id || null;
-      // Ensure part_id is a valid DB UUID or null (failsafe for fallback string IDs like "part-4")
       const dbPartId = partId && !partId.startsWith("part-") ? partId : null;
+
+      const totalDurationMs = testRuns.reduce((acc, r) => acc + r.duration_ms, 0);
 
       const { data: inspection, error } = await supabase
         .from("inspections")
@@ -239,7 +254,7 @@ function NewInspectionPage() {
           inspection_time: now.toTimeString().slice(0, 8),
           shift,
           area,
-          duration_seconds: Math.round(testResult.duration_ms / 1000),
+          duration_seconds: Math.round(totalDurationMs / 1000),
           status: finalStatus,
           remarks,
         })
@@ -249,39 +264,37 @@ function NewInspectionPage() {
 
       const inspectionId = inspection.id as string;
 
-      if (testResult.measurements.length) {
+      if (allMeasurements.length) {
         await supabase.from("measurement_results").insert(
-          testResult.measurements.map((m) => ({
+          allMeasurements.map((m) => ({
             inspection_id: inspectionId,
             ...toSupabaseMeasurement(m),
           })),
         );
       }
-      if (testResult.defects.length) {
+      if (allDefects.length) {
         await supabase.from("defect_results").insert(
-          testResult.defects.map((d) => ({
+          allDefects.map((d) => ({
             inspection_id: inspectionId,
             ...toSupabaseDefect(d),
           })),
         );
       }
 
-      // Upload captured top and side views to storage from ALL runs
+      // Upload captured top and side views from all runs
       const imagesToUpload: Array<{ b64: string; type: string }> = [];
-      measureRuns.forEach((run, idx) => {
-        if (run.top_annotated_b64) {
-          imagesToUpload.push({ b64: run.top_annotated_b64, type: `measurement_top_${idx + 1}` });
+      testRuns.forEach((run, idx) => {
+        if (run.top_measure_b64) {
+          imagesToUpload.push({ b64: run.top_measure_b64, type: `measurement_top_${idx + 1}` });
         }
-        if (run.side_annotated_b64) {
-          imagesToUpload.push({ b64: run.side_annotated_b64, type: `measurement_side_${idx + 1}` });
+        if (run.side_measure_b64) {
+          imagesToUpload.push({ b64: run.side_measure_b64, type: `measurement_side_${idx + 1}` });
         }
-      });
-      inspectRuns.forEach((run, idx) => {
-        if (run.top_annotated_b64) {
-          imagesToUpload.push({ b64: run.top_annotated_b64, type: `defect_top_${idx + 1}` });
+        if (run.top_inspect_b64) {
+          imagesToUpload.push({ b64: run.top_inspect_b64, type: `defect_top_${idx + 1}` });
         }
-        if (run.side_annotated_b64) {
-          imagesToUpload.push({ b64: run.side_annotated_b64, type: `defect_side_${idx + 1}` });
+        if (run.side_inspect_b64) {
+          imagesToUpload.push({ b64: run.side_inspect_b64, type: `defect_side_${idx + 1}` });
         }
       });
 
@@ -319,7 +332,7 @@ function NewInspectionPage() {
   }
 
   return (
-    <AppShell title="New Inspection" subtitle="Guided measurement and surface defect workflow">
+    <AppShell title="New Inspection" subtitle="Guided measurement and surface check workflow">
       <div className="space-y-5">
         <Stepper step={step} />
 
@@ -339,32 +352,51 @@ function NewInspectionPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {parts.map((p) => (
-                  <button
+                  <div
                     key={p.id}
-                    type="button"
-                    onClick={() => setPartId(p.id)}
                     className={cn(
-                      "group flex gap-4 rounded-xl border p-4 text-left transition-all",
+                      "group flex flex-col justify-between rounded-xl border p-4 transition-all relative",
                       partId === p.id
                         ? "border-primary bg-primary-subtle shadow-card"
                         : "border-border bg-background hover:border-brand-blue/40 hover:shadow-card",
                     )}
                   >
-                    <PartImage
-                      partName={p.part_name}
-                      refValue={p.reference_image}
-                      alt={p.part_name}
-                      usePhoto={true}
-                      className="size-16 shrink-0 rounded-lg object-contain p-1"
-                    />
-                    <div className="min-w-0">
-                      <p className="type-body-m font-semibold text-foreground">{p.part_name}</p>
-                      <p className="type-body-s line-clamp-2 text-muted-foreground">
-                        {p.description || "No description"}
-                      </p>
+                    <button
+                      type="button"
+                      onClick={() => setPartId(p.id)}
+                      className="flex gap-4 text-left w-full h-full"
+                    >
+                      <PartImage
+                        partName={p.part_name}
+                        refValue={p.reference_image}
+                        alt={p.part_name}
+                        usePhoto={true}
+                        className="size-16 shrink-0 rounded-lg object-contain p-1"
+                      />
+                      <div className="min-w-0 pr-8">
+                        <p className="type-body-m font-semibold text-foreground">{p.part_name}</p>
+                        <p className="type-body-s line-clamp-2 text-muted-foreground mt-0.5">
+                          {p.description || "No description"}
+                        </p>
+                      </div>
+                      {partId === p.id && <Check className="absolute top-4 right-4 size-5 shrink-0 text-primary" />}
+                    </button>
+                    <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs font-semibold hover:bg-muted"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveSpecPart(p);
+                          setIsSpecDialogOpen(true);
+                        }}
+                      >
+                        <Info className="mr-1 size-3.5" />
+                        Specifications
+                      </Button>
                     </div>
-                    {partId === p.id && <Check className="ml-auto size-5 shrink-0 text-primary" />}
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -372,170 +404,6 @@ function NewInspectionPage() {
         )}
 
         {step === 1 && (
-          <SectionCard title="Select AI model" subtitle="Active detection model for this part">
-            {!partId ? (
-              <p className="type-body-m text-muted-foreground">
-                Please select a part first.
-              </p>
-            ) : modelsLoading ? (
-              <p className="type-body-m text-muted-foreground animate-pulse py-6">Loading AI models from database...</p>
-            ) : modelsError ? (
-              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-500">
-                <p className="type-body-m font-semibold">Failed to load models:</p>
-                <p className="type-body-s mt-1 font-mono">{(modelsError as Error)?.message || "Database connection error"}</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <button
-                  type="button"
-                  onClick={() => setModelId(unifiedModelId)}
-                  className={cn(
-                    "rounded-xl border p-4 text-left transition-all",
-                    modelId === unifiedModelId
-                      ? "border-primary bg-primary-subtle shadow-card"
-                      : "border-border bg-background hover:border-brand-blue/40 hover:shadow-card",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex size-9 items-center justify-center rounded-lg bg-brand-blue-subtle">
-                      <Cpu className="size-4 text-brand-blue" />
-                    </span>
-                    <span className="rounded-full bg-brand-green-subtle px-2 py-0.5 type-caption font-medium text-brand-green">
-                      <span className="mr-1 inline-block size-1.5 rounded-full bg-brand-green"></span>
-                      Active
-                    </span>
-                  </div>
-                  <div className="mt-3">
-                    <p className="type-body-m font-semibold text-foreground">
-                      {part?.part_name} Unified Inspection Model
-                    </p>
-                    <p className="mt-0.5 type-body-s text-muted-foreground">
-                      Combined measure & defect v1.0
-                    </p>
-                  </div>
-                </button>
-              </div>
-            )}
-          </SectionCard>
-        )}
-
-        {step === 2 && (() => {
-          if (specsLoading) {
-            return (
-              <SectionCard title="Specification" subtitle="Loading tolerances...">
-                <p className="type-body-m text-muted-foreground animate-pulse py-6">Retrieving dimensions from database...</p>
-              </SectionCard>
-            );
-          }
-          if (specsError) {
-            return (
-              <SectionCard title="Specification" subtitle="Tolerances error">
-                <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-500">
-                  <p className="type-body-m font-semibold">Failed to load specifications:</p>
-                  <p className="type-body-s mt-1 font-mono">{(specsError as Error)?.message || "Database connection error"}</p>
-                </div>
-              </SectionCard>
-            );
-          }
-          // Bulletproof UI fallback for specs
-          let displaySpecs: any[] = specs;
-          if (displaySpecs.length === 0 && part?.part_name) {
-            // Hardcode the exhaustive fallback directly in UI as a failsafe
-            const staticSpecs = [
-              // CAPNUT
-              { id: "c1", part_id: "part-1", parameter: "OD - Across Flats (hex)", expected_value: 36, tolerance: 0, unit: "mm", notes: "+0 / -0.62" },
-              { id: "c2", part_id: "part-1", parameter: "OD - Across Corners (hex max)", expected_value: 39, tolerance: 0, unit: "mm", notes: "" },
-              { id: "c3", part_id: "part-1", parameter: "Overall Height", expected_value: 17.5, tolerance: 0, unit: "mm", notes: "+0 / -0.1" },
-              { id: "c4", part_id: "part-1", parameter: "ID - Internal Thread", expected_value: 16, tolerance: 0, unit: "mm", notes: "M16 x 1.5 blind end" },
-              { id: "c5", part_id: "part-1", parameter: "Bore Step Ø1", expected_value: 17.15, tolerance: 0.20, unit: "mm", notes: "" },
-              { id: "c6", part_id: "part-1", parameter: "Bore Step Ø2", expected_value: 14.575, tolerance: 0.075, unit: "mm", notes: "" },
-              { id: "c7", part_id: "part-1", parameter: "Bore Step Ø3", expected_value: 10.675, tolerance: 0.075, unit: "mm", notes: "" },
-              { id: "c8", part_id: "part-1", parameter: "Bore Step Ø4 (thread minor)", expected_value: 9.575, tolerance: 0.075, unit: "mm", notes: "" },
-              { id: "c9", part_id: "part-1", parameter: "Boss / Collar OD (Detail Y)", expected_value: 21.9, tolerance: 0, unit: "mm", notes: "" },
-              { id: "c10", part_id: "part-1", parameter: "Boss / Collar ID (Detail Y)", expected_value: 7.8, tolerance: 0, unit: "mm", notes: "" },
-              { id: "c11", part_id: "part-1", parameter: "Shoulder OD (Section G-G)", expected_value: 34.7, tolerance: 0, unit: "mm", notes: "" },
-              { id: "c12", part_id: "part-1", parameter: "Male Thread Boss Diameter", expected_value: 25.40, tolerance: 0.05, unit: "mm", notes: "" },
-              { id: "c13", part_id: "part-1", parameter: "Male Thread", expected_value: 28.57, tolerance: 0, unit: "mm", notes: "1-1/8\"-12 UNF" },
-              { id: "c14", part_id: "part-1", parameter: "Small Hole Diameter", expected_value: 4.6, tolerance: 0, unit: "mm", notes: "" },
-              // STUD
-              { id: "s1", part_id: "part-2", parameter: "Overall Length", expected_value: 38.10, tolerance: 0.8, unit: "mm", notes: "" },
-              { id: "s2", part_id: "part-2", parameter: "Metal-End Length", expected_value: 11.60, tolerance: 0.8, unit: "mm", notes: "" },
-              { id: "s3", part_id: "part-2", parameter: "Nut-End Thread Length", expected_value: 19.30, tolerance: 0, unit: "mm", notes: "" },
-              { id: "s4", part_id: "part-2", parameter: "Shank OD", expected_value: 7.90, tolerance: 0, unit: "mm", notes: "" },
-              { id: "s5", part_id: "part-2", parameter: "Thread (both ends)", expected_value: 7.93, tolerance: 0, unit: "mm", notes: "5/16\"-18 UNC 2A" },
-              // ADAPTER
-              { id: "a1", part_id: "part-3", parameter: "OD - Across Flats (hex)", expected_value: 27.00, tolerance: 0, unit: "mm", notes: "Both sides" },
-              { id: "a2", part_id: "part-3", parameter: "Bore / Pilot ID", expected_value: 19.70, tolerance: 0.1, unit: "mm", notes: "" },
-              { id: "a3", part_id: "part-3", parameter: "Groove / Step Width", expected_value: 2.10, tolerance: 0.1, unit: "mm", notes: "" },
-              { id: "a4", part_id: "part-3", parameter: "Thread (both sides)", expected_value: 22.00, tolerance: 0, unit: "mm", notes: "M22 x 1.5" },
-              // PIN
-              { id: "p1", part_id: "part-4", parameter: "OD (Outer Diameter ØA)", expected_value: 11.979, tolerance: 0.021, unit: "mm", notes: "" },
-              { id: "p2", part_id: "part-4", parameter: "ID (Through-hole ØD - ×2)", expected_value: 3.20, tolerance: 0, unit: "mm", notes: "" },
-              { id: "p3", part_id: "part-4", parameter: "Length (L, overall)", expected_value: 87.60, tolerance: 0.20, unit: "mm", notes: "" },
-              { id: "p4", part_id: "part-4", parameter: "Length (C, hole centers)", expected_value: 81.20, tolerance: 0.20, unit: "mm", notes: "" },
-              { id: "p5", part_id: "part-4", parameter: "Width/Chamfer (B)", expected_value: 3.20, tolerance: 0, unit: "mm", notes: "" },
-            ];
-            const nameToId: Record<string, string> = { "capnut": "part-1", "stud": "part-2", "adapter": "part-3", "pin": "part-4" };
-            const fallbackId = nameToId[part.part_name.toLowerCase().trim()];
-            if (fallbackId) {
-              displaySpecs = staticSpecs.filter(s => s.part_id === fallbackId);
-            }
-          }
-
-          return (
-            <div className="grid gap-4 lg:grid-cols-3">
-              <SectionCard
-                title="Specification"
-                subtitle={part ? `Tolerances for ${part.part_name}` : "Tolerances"}
-                className="lg:col-span-2"
-                bodyClassName="p-0"
-              >
-                {displaySpecs.length === 0 ? (
-                  <p className="px-5 py-12 text-center type-body-m text-muted-foreground">
-                    No specification parameters defined for this part.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/40">
-                          <Th>Parameter</Th>
-                          <Th>Expected</Th>
-                          <Th>Tolerance</Th>
-                          <Th>Unit</Th>
-                          <Th>Notes</Th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {displaySpecs.map((s) => (
-                          <tr key={s.id}>
-                            <Td className="font-medium text-foreground">{s.parameter}</Td>
-                            <Td className="tabular">{s.expected_value}</Td>
-                            <Td className="tabular">{s.tolerance > 0 ? `±${s.tolerance}` : "—"}</Td>
-                            <Td>{s.unit}</Td>
-                            <Td className="text-muted-foreground">{s.notes || "—"}</Td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </SectionCard>
-
-
-            <SectionCard title="Reference" subtitle="Part reference imagery">
-              <PartImage
-                partName={part?.part_name ?? ""}
-                refValue={part?.reference_image ?? null}
-                alt={part?.part_name ?? "Part reference"}
-                className="h-48 w-full rounded-lg object-contain p-2"
-              />
-            </SectionCard>
-          </div>
-          );
-        })()}
-
-        {step === 3 && (
           <div className="space-y-4">
 
             {/* ── Backend status bar ──────────────────────────────────────── */}
@@ -555,7 +423,7 @@ function NewInspectionPage() {
             {/* ── Live camera feed strip ──────────────────────────────────── */}
             <SectionCard
               title="Live Camera Feeds"
-              subtitle="Top view (left) · Side view (right) — real-time from Hikrobot GigE cameras"
+              subtitle="Top view (left) · Side view (right) — real-time feed"
               action={
                 <div className="flex gap-2">
                   <button
@@ -579,7 +447,7 @@ function NewInspectionPage() {
                     ? measureStreamUrl(part?.part_name ?? "capnut")
                     : inspectStreamUrl(part?.part_name ?? "capnut")
                   }
-                  alt="Live camera feed — top and side view"
+                  alt="Live camera feed"
                   className="w-full rounded-xl border border-border object-contain bg-muted"
                   style={{ maxHeight: 320 }}
                 />
@@ -593,259 +461,247 @@ function NewInspectionPage() {
               )}
             </SectionCard>
 
-            {/* ── Action buttons ──────────────────────────────────────────── */}
-            <div className="grid gap-4 sm:grid-cols-3">
-              {/* Measure */}
+            {/* ── Action capture panel ────────────────────────────────────── */}
+            <div className="grid gap-4 sm:grid-cols-2 items-center">
               <button
-                id="btn-capture-measure"
-                onClick={handleMeasure}
-                disabled={running !== null || backendStatus === "offline"}
+                id="btn-inspect-part"
+                onClick={handleInspectPart}
+                disabled={running !== null || backendStatus === "offline" || testRuns.length >= 5}
                 className={cn(
-                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
-                  measureRuns.length > 0
-                    ? measureRuns.every((r) => r.status === "PASS")
+                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all min-h-40 justify-center",
+                  testRuns.length > 0
+                    ? finalStatus === "ok"
                       ? "border-emerald-500/50 bg-emerald-500/10"
                       : "border-rose-500/50 bg-rose-500/10"
                     : "border-border bg-card hover:border-brand-blue/50 hover:bg-brand-blue-subtle",
-                  (running !== null || backendStatus === "offline") && "cursor-not-allowed opacity-60",
-                )}
-              >
-                {running === "measure" ? (
-                  <Loader2 className="size-10 animate-spin text-brand-blue" />
-                ) : measureRuns.length > 0 ? (
-                  measureRuns.every((r) => r.status === "PASS")
-                    ? <CheckCircle2 className="size-10 text-emerald-400" />
-                    : <XCircle className="size-10 text-rose-400" />
-                ) : (
-                  <Ruler className="size-10 text-brand-blue transition-transform duration-200 group-hover:scale-110" />
-                )}
-                <div>
-                  <p className="type-body-m font-bold text-foreground">📷 Capture & Measure</p>
-                  <p className="type-caption text-muted-foreground mt-1">
-                    {measureRuns.length > 0 
-                      ? `Captured: ${measureRuns.length} run(s) (${measureRuns.length * 2} frames)`
-                      : "Snapshot → dimensional analysis"
-                    }
-                  </p>
-                  {measureRuns.length > 0 && (
-                    <span className={cn("mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold",
-                      measureRuns.every((r) => r.status === "PASS") ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
-                    )}>
-                      {measureRuns.every((r) => r.status === "PASS") ? "ALL PASS" : "FAIL ENCOUNTERED"}
-                    </span>
-                  )}
-                </div>
-              </button>
-
-              {/* Inspect */}
-              <button
-                id="btn-capture-inspect"
-                onClick={handleInspect}
-                disabled={running !== null || backendStatus === "offline"}
-                className={cn(
-                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
-                  inspectRuns.length > 0
-                    ? inspectRuns.every((r) => r.status === "pass")
-                      ? "border-emerald-500/50 bg-emerald-500/10"
-                      : "border-rose-500/50 bg-rose-500/10"
-                    : "border-border bg-card hover:border-rose-500/50 hover:bg-rose-500/5",
-                  (running !== null || backendStatus === "offline") && "cursor-not-allowed opacity-60",
+                  (running !== null || backendStatus === "offline" || testRuns.length >= 5) && "cursor-not-allowed opacity-60",
                 )}
               >
                 {running === "inspect" ? (
-                  <Loader2 className="size-10 animate-spin text-rose-400" />
-                ) : inspectRuns.length > 0 ? (
-                  inspectRuns.every((r) => r.status === "pass")
-                    ? <CheckCircle2 className="size-10 text-emerald-400" />
-                    : <XCircle className="size-10 text-rose-400" />
+                  <Loader2 className="size-10 animate-spin text-brand-blue" />
                 ) : (
-                  <ScanEye className="size-10 text-rose-400 transition-transform duration-200 group-hover:scale-110" />
+                  <Camera className="size-10 text-brand-blue transition-transform duration-200 group-hover:scale-110" />
                 )}
                 <div>
-                  <p className="type-body-m font-bold text-foreground">🔍 Capture & Inspect</p>
+                  <p className="type-body-m font-bold text-foreground">📷 Inspect Part</p>
                   <p className="type-caption text-muted-foreground mt-1">
-                    {inspectRuns.length > 0
-                      ? `Captured: ${inspectRuns.length} run(s) (${inspectRuns.length * 2} frames)`
-                      : "Snapshot → YOLO surface defects"
+                    {testRuns.length > 0
+                      ? `Captured: ${testRuns.length} / 5 snapshots`
+                      : "Capture snapshot to measure and inspect"
                     }
                   </p>
-                  {inspectRuns.length > 0 && (
-                    <span className={cn("mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold",
-                      inspectRuns.every((r) => r.status === "pass") ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
-                    )}>
-                      {inspectRuns.every((r) => r.status === "pass") ? "NO DEFECTS" : `${inspectRuns.reduce((acc, r) => acc + r.defects.length, 0)} DEFECT(S)`}
-                    </span>
-                  )}
                 </div>
               </button>
 
-              {/* Run Model Evaluation */}
-              <button
-                id="btn-run-test"
-                onClick={handleRunTest}
-                disabled={running !== null || backendStatus === "offline"}
-                className={cn(
-                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all",
-                  testResult
-                    ? testResult.verdict === "ok"
-                      ? "border-emerald-500/60 bg-emerald-500/15"
-                      : "border-rose-500/60 bg-rose-500/15"
-                    : "border-dashed border-brand-blue/50 bg-brand-blue-subtle hover:border-brand-blue hover:bg-brand-blue/10",
-                  (running !== null || backendStatus === "offline") && "cursor-not-allowed opacity-60",
-                )}
-              >
-                {running === "test" ? (
-                  <Loader2 className="size-10 animate-spin text-brand-blue" />
-                ) : testResult ? (
-                  testResult.verdict === "ok"
-                    ? <CheckCircle2 className="size-10 text-emerald-400" />
-                    : <XCircle className="size-10 text-rose-400" />
-                ) : (
-                  <PlayCircle className="size-10 text-brand-blue transition-transform duration-200 group-hover:scale-110" />
-                )}
-                <div>
-                  <p className="type-body-m font-bold text-foreground">▶ Run Model Evaluation</p>
-                  <p className="type-caption text-muted-foreground mt-1">Compile all captured frames → final verdict</p>
-                  {testResult && (
-                    <span className={cn("mt-2 inline-block rounded-full px-3 py-0.5 text-sm font-bold",
-                      testResult.verdict === "ok" ? "bg-emerald-500/25 text-emerald-300" : "bg-rose-500/25 text-rose-300"
-                    )}>
-                      {testResult.verdict.toUpperCase()}
-                    </span>
-                  )}
+              {/* Status and runs selector */}
+              {testRuns.length > 0 && (
+                <div className="surface-card rounded-2xl p-6 min-h-40 flex flex-col justify-between">
+                  <div>
+                    <h4 className="type-body-m font-bold text-foreground">Capture check runs</h4>
+                    <p className="type-caption text-muted-foreground mt-0.5">Toggle between saved images to view details</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {testRuns.map((run, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSelectedRunIdx(idx)}
+                        className={cn(
+                          "rounded-lg px-3 py-1.5 text-xs font-semibold border transition-all flex items-center gap-1.5",
+                          selectedRunIdx === idx
+                            ? "bg-brand-blue border-brand-blue text-white shadow-sm"
+                            : "bg-background border-border text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        Run {idx + 1}
+                        {run.verdict === "ok" ? (
+                          <span className="size-2 rounded-full bg-emerald-400" />
+                        ) : (
+                          <span className="size-2 rounded-full bg-rose-400" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </button>
+              )}
             </div>
 
             {/* ── Results panels ──────────────────────────────────────────── */}
             <AnimatePresence>
+              {testRuns.length > 0 && (() => {
+                const selectedRun = testRuns[selectedRunIdx];
+                if (!selectedRun) return null;
 
-              {/* Measurement results */}
-              {measureResult && (
-                <motion.div
-                  key="measure-results"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                >
-                  <SectionCard
-                    title="Dimensional Measurement Results"
-                    subtitle={`${measureResult.measurements.filter(m=>m.pass).length}/${measureResult.measurements.length} parameters within tolerance · ${measureResult.duration_ms}ms`}
+                const activeMeasurements = selectedRun.measurements;
+                const activeDefects = selectedRun.defects;
+                const passMeasurements = activeMeasurements.every((m) => m.pass);
+                const hasDefects = activeDefects.length > 0;
+                const runVerdict = (passMeasurements && !hasDefects) ? "ok" : "reject";
+
+                return (
+                  <motion.div
+                    key={`run-${selectedRunIdx}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-4"
                   >
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      {/* Annotated images */}
-                      <div className="space-y-2">
-                        <p className="type-caption text-muted-foreground">Top View — annotated</p>
-                        <img src={`data:image/jpeg;base64,${measureResult.top_annotated_b64}`}
-                          alt="Top view measurement" className="w-full rounded-lg border border-border object-contain bg-muted" />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="type-caption text-muted-foreground">Side View — annotated</p>
-                        <img src={`data:image/jpeg;base64,${measureResult.side_annotated_b64}`}
-                          alt="Side view measurement" className="w-full rounded-lg border border-border object-contain bg-muted" />
-                      </div>
-                    </div>
-                    {/* Table */}
-                    <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/40">
-                            <Th>Parameter</Th><Th>Measured</Th><Th>Expected</Th><Th>Tolerance</Th><Th>Status</Th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {measureResult.measurements.map((m) => {
-                            const dev = Number((m.measured - m.expected).toFixed(4));
-                            return (
-                              <tr key={m.parameter} className={m.pass ? "" : "bg-rose-500/5"}>
-                                <Td className="font-medium">{m.parameter}</Td>
-                                <Td className={cn("tabular font-semibold", m.pass ? "text-emerald-400" : "text-rose-400")}>{m.measured} {m.unit}</Td>
-                                <Td className="tabular text-muted-foreground">{m.expected} {m.unit}</Td>
-                                <Td className="tabular text-muted-foreground">±{m.tolerance} {m.unit}</Td>
-                                <Td>{m.pass ? <CheckCircle2 className="size-4 text-emerald-400" /> : <XCircle className="size-4 text-rose-400" />}</Td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </SectionCard>
-                </motion.div>
-              )}
-
-              {/* Inspect results */}
-              {inspectResult && (
-                <motion.div
-                  key="inspect-results"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                >
-                  <SectionCard
-                    title="Surface Defect Inspection Results"
-                    subtitle={inspectResult.status === "pass" ? "No defects detected" : `${inspectResult.defects.length} defect(s) found · ${inspectResult.duration_ms}ms`}
-                  >
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <div className="space-y-2">
-                        <p className="type-caption text-muted-foreground">Top View — YOLO annotated</p>
-                        <img src={`data:image/jpeg;base64,${inspectResult.top_annotated_b64}`}
-                          alt="Top view defect" className="w-full rounded-lg border border-border object-contain bg-muted" />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="type-caption text-muted-foreground">Side View — YOLO annotated</p>
-                        <img src={`data:image/jpeg;base64,${inspectResult.side_annotated_b64}`}
-                          alt="Side view defect" className="w-full rounded-lg border border-border object-contain bg-muted" />
-                      </div>
-                    </div>
-                    {inspectResult.defects.length > 0 && (
-                      <ul className="mt-4 space-y-2">
-                        {inspectResult.defects.map((d, i) => (
-                          <li key={i} className="flex items-center justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2.5">
-                            <div>
-                              <p className="type-body-m font-semibold text-rose-300">{d.name}</p>
-                              <p className="type-caption text-muted-foreground">{d.cam} · Confidence {(d.confidence * 100).toFixed(1)}% · Box [{d.bbox.join(", ")}]</p>
-                            </div>
-                            <AlertTriangle className="size-5 text-rose-400 shrink-0" />
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {inspectResult.status === "pass" && (
-                      <p className="mt-3 flex items-center gap-2 type-body-m text-emerald-400">
-                        <CheckCircle2 className="size-5" /> No surface defects detected on either camera.
-                      </p>
-                    )}
-                  </SectionCard>
-                </motion.div>
-              )}
-
-              {/* Full test result verdict */}
-              {testResult && (
-                <motion.div
-                  key="test-result"
-                  initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-                >
-                  <div className={cn(
-                    "rounded-2xl border-2 p-6 text-center",
-                    testResult.verdict === "ok" ? "border-emerald-500/60 bg-emerald-500/10" : "border-rose-500/60 bg-rose-500/10",
-                  )}>
-                    {testResult.verdict === "ok" ? (
-                      <CheckCircle2 className="mx-auto mb-3 size-16 text-emerald-400" />
-                    ) : (
-                      <XCircle className="mx-auto mb-3 size-16 text-rose-400" />
-                    )}
-                    <h2 className={cn("text-3xl font-black tracking-tight",
-                      testResult.verdict === "ok" ? "text-emerald-300" : "text-rose-300"
+                    {/* Run Verdict Alert */}
+                    <div className={cn(
+                      "rounded-2xl border-2 p-5 text-center transition-all",
+                      runVerdict === "ok" ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10",
                     )}>
-                      {testResult.verdict === "ok" ? "✅ PART ACCEPTED" : "❌ PART REJECTED"}
-                    </h2>
-                    <p className="mt-2 type-body-m text-muted-foreground">
-                      Measurement: <span className={testResult.measure_status === "PASS" ? "text-emerald-400" : "text-rose-400"}>{testResult.measure_status}</span>
-                      {" · "}
-                      Defects: <span className={testResult.inspect_status === "pass" ? "text-emerald-400" : "text-rose-400"}>{testResult.inspect_status === "pass" ? "None" : `${testResult.defects.length} found`}</span>
-                      {" · "}
-                      <span className="text-muted-foreground">{testResult.duration_ms}ms</span>
-                    </p>
-                  </div>
-                </motion.div>
-              )}
+                      <div className="flex items-center justify-center gap-3">
+                        {runVerdict === "ok" ? (
+                          <CheckCircle2 className="size-8 text-emerald-400" />
+                        ) : (
+                          <XCircle className="size-8 text-rose-400" />
+                        )}
+                        <h3 className={cn("text-xl font-bold tracking-tight",
+                          runVerdict === "ok" ? "text-emerald-300" : "text-rose-300"
+                        )}>
+                          Run {selectedRunIdx + 1} Verdict: {runVerdict === "ok" ? "PART ACCEPTED" : "PART REJECTED"}
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* Run Details Panel */}
+                    <SectionCard
+                      title={`Run ${selectedRunIdx + 1} Analysis`}
+                      subtitle={`Duration: ${selectedRun.duration_ms}ms · Top and side views`}
+                      action={
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setDetailImageMode("measure")}
+                            className={cn("rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors border",
+                              detailImageMode === "measure" 
+                                ? "bg-brand-blue border-brand-blue text-white" 
+                                : "bg-background border-border text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            📐 Measurements
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDetailImageMode("inspect")}
+                            className={cn("rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors border",
+                              detailImageMode === "inspect" 
+                                ? "bg-rose-500 border-rose-500 text-white" 
+                                : "bg-background border-border text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            🔍 Defect Check
+                          </button>
+                        </div>
+                      }
+                    >
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        {/* Snapshots */}
+                        <div className="space-y-2">
+                          <p className="type-caption text-muted-foreground">Top View — annotated</p>
+                          <img 
+                            src={`data:image/jpeg;base64,${detailImageMode === "measure" ? selectedRun.top_measure_b64 : selectedRun.top_inspect_b64}`}
+                            alt="Top View snapshot" 
+                            className="w-full rounded-lg border border-border object-contain bg-muted" 
+                            style={{ maxHeight: 280 }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <p className="type-caption text-muted-foreground">Side View — annotated</p>
+                          <img 
+                            src={`data:image/jpeg;base64,${detailImageMode === "measure" ? selectedRun.side_measure_b64 : selectedRun.side_inspect_b64}`}
+                            alt="Side View snapshot" 
+                            className="w-full rounded-lg border border-border object-contain bg-muted" 
+                            style={{ maxHeight: 280 }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Measurements Table & Defects List */}
+                      <div className="grid gap-6 mt-6 lg:grid-cols-3">
+                        {/* Measurements table */}
+                        <div className="lg:col-span-2 space-y-2">
+                          <h4 className="type-body-m font-bold text-foreground">Measurement parameters</h4>
+                          <div className="overflow-x-auto rounded-xl border border-border">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="border-b border-border bg-muted/40">
+                                  <Th>Parameter</Th><Th>Measured</Th><Th>Expected</Th><Th>Tolerance</Th><Th>Status</Th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {activeMeasurements.map((m) => (
+                                  <tr key={m.parameter} className={m.pass ? "" : "bg-rose-500/5"}>
+                                    <Td className="font-medium">{m.parameter}</Td>
+                                    <Td className={cn("tabular font-semibold", m.pass ? "text-emerald-400" : "text-rose-400")}>
+                                      {m.measured} {m.unit}
+                                    </Td>
+                                    <Td className="tabular text-muted-foreground">{m.expected} {m.unit}</Td>
+                                    <Td className="tabular text-muted-foreground">±{m.tolerance} {m.unit}</Td>
+                                    <Td>{m.pass ? <CheckCircle2 className="size-4 text-emerald-400" /> : <XCircle className="size-4 text-rose-400" />}</Td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Defects list */}
+                        <div className="space-y-2">
+                          <h4 className="type-body-m font-bold text-foreground">Surface defect inspection</h4>
+                          {activeDefects.length > 0 ? (
+                            <ul className="space-y-2">
+                              {activeDefects.map((d, i) => (
+                                <li key={i} className="flex items-center justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2">
+                                  <div>
+                                    <p className="type-body-m font-semibold text-rose-300">{d.name}</p>
+                                    <p className="type-caption text-muted-foreground">{d.cam} · Conf {(d.confidence * 100).toFixed(0)}%</p>
+                                  </div>
+                                  <AlertTriangle className="size-4 text-rose-400 shrink-0" />
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border bg-muted/20">
+                              <p className="text-center type-body-s text-emerald-400 flex items-center gap-1.5">
+                                <CheckCircle2 className="size-4" /> No defects detected
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </SectionCard>
+                  </motion.div>
+                );
+              })()}
             </AnimatePresence>
+
+            {/* ── Combined inspection verdict panel ──────────────────────── */}
+            {testRuns.length > 0 && (
+              <div className={cn(
+                "rounded-2xl border-2 p-6 text-center mt-4",
+                finalStatus === "ok" ? "border-emerald-500/60 bg-emerald-500/15" : "border-rose-500/60 bg-rose-500/15",
+              )}>
+                {finalStatus === "ok" ? (
+                  <CheckCircle2 className="mx-auto mb-3 size-12 text-emerald-400" />
+                ) : (
+                  <XCircle className="mx-auto mb-3 size-12 text-rose-400" />
+                )}
+                <h2 className={cn("text-2xl font-black tracking-tight",
+                  finalStatus === "ok" ? "text-emerald-300" : "text-rose-300"
+                )}>
+                  {finalStatus === "ok" ? "ACCEPT BATCH" : "REJECT BATCH"}
+                </h2>
+                <p className="mt-1 type-body-s text-muted-foreground">
+                  Measurements: <span className={allMeasuresPass ? "text-emerald-400" : "text-rose-400"}>{allMeasuresPass ? "ALL PASS" : "FAIL ENCOUNTERED"}</span>
+                  {" · "}
+                  Defects: <span className={!hasDefects ? "text-emerald-400" : "text-rose-400"}>{!hasDefects ? "NONE DETECTED" : `${allDefects.length} FOUND`}</span>
+                  {" · "}
+                  <span className="text-muted-foreground">{testRuns.reduce((acc, r) => acc + r.duration_ms, 0)}ms total</span>
+                </p>
+              </div>
+            )}
 
             {/* ── Inspection record ───────────────────────────────────────── */}
             <SectionCard title="Inspection record" subtitle="Context saved with this result">
@@ -871,15 +727,15 @@ function NewInspectionPage() {
                     {finalStatus ? (
                       <StatusBadge status={finalStatus} />
                     ) : (
-                      <span className="type-body-s text-muted-foreground">Run Full Test to get a verdict</span>
+                      <span className="type-body-s text-muted-foreground">Perform snapshot inspect to get a verdict</span>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2 sm:col-span-3">
-                  <Label htmlFor="remarks">Remarks</Label>
+                  <Label htmlFor="remarks">Remarks / Notes</Label>
                   <Textarea
                     id="remarks"
-                    rows={3}
+                    rows={2}
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
                     placeholder="Operator notes, rework instructions, batch reference…"
@@ -889,6 +745,46 @@ function NewInspectionPage() {
             </SectionCard>
           </div>
         )}
+
+        {/* Specifications Information Dialog */}
+        <Dialog open={isSpecDialogOpen} onOpenChange={setIsSpecDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Specifications: {activeSpecPart?.part_name}</DialogTitle>
+              <DialogDescription>Reference standards and tolerance levels</DialogDescription>
+            </DialogHeader>
+            {activeSpecs.length === 0 ? (
+              <p className="py-6 text-center type-body-m text-muted-foreground">
+                No specification parameters defined for this part family.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <Th>Parameter</Th>
+                      <Th>Expected</Th>
+                      <Th>Tolerance</Th>
+                      <Th>Unit</Th>
+                      <Th>Notes</Th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {activeSpecs.map((s) => (
+                      <tr key={s.id}>
+                        <Td className="font-medium text-foreground">{s.parameter}</Td>
+                        <Td className="tabular">{s.expected_value}</Td>
+                        <Td className="tabular">{s.tolerance > 0 ? `±${s.tolerance}` : "—"}</Td>
+                        <Td>{s.unit}</Td>
+                        <Td className="text-muted-foreground">{s.notes || "—"}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         <div className="flex items-center justify-between gap-3">
           <Button
@@ -900,7 +796,7 @@ function NewInspectionPage() {
             Back
           </Button>
 
-          {step < 3 ? (
+          {step < 1 ? (
             <Button onClick={() => setStep((s) => s + 1)} disabled={!canNext}>
               Continue
               <ArrowRight className="size-4" />
