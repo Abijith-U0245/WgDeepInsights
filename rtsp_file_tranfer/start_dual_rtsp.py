@@ -352,6 +352,84 @@ def apply_part_preset(
           f"side exp={p['side_exposure']} gain={p['side_gain']}")
 
 
+class SimulatedCamera:
+    """Simulated GigE camera that generates synthetic frames when physical hardware is absent."""
+    def __init__(self, serial: str, exposure: float, gain: float, fps: float):
+        self.serial = serial
+        self.exposure = exposure
+        self.gain = gain
+        self.fps = fps
+        self.opened = False
+        self._counter = 0
+        self._lock = threading.Lock()
+
+    def open(self):
+        self.opened = True
+        print(f"[Simulated CAM {self.serial}] Opened and generating synthetic frames.")
+
+    def set_exposure_gain(self, exposure: float, gain: float):
+        with self._lock:
+            self.exposure = exposure
+            self.gain = gain
+
+    def read(self) -> np.ndarray | None:
+        if not self.opened:
+            return None
+        with self._lock:
+            self._counter += 1
+            # Generate a 1280x720 synthetic frame
+            frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+            frame[:] = (20, 20, 25) # dark background
+
+            # Draw some grids/patterns
+            for i in range(0, 1280, 80):
+                cv2.line(frame, (i, 0), (i, 720), (40, 40, 40), 1)
+            for j in range(0, 720, 80):
+                cv2.line(frame, (0, j), (1280, j), (40, 40, 40), 1)
+
+            # Draw a simulated "part" in the center depending on the serial
+            is_top = "5211006" in self.serial or "top" in self.serial.lower()
+            label = "TOP CAMERA" if is_top else "SIDE CAMERA"
+            color = (0, 255, 100) if is_top else (0, 180, 255)
+
+            # Draw center alignment circle
+            cv2.circle(frame, (640, 360), 200, (50, 50, 50), 2)
+            cv2.circle(frame, (640, 360), 10, (0, 0, 255), -1)
+
+            # Simulated part shape (moving slightly to simulate motion)
+            t = self._counter % 100
+            offset = int(10 * np.sin(t * 2 * np.pi / 100))
+            if is_top:
+                # Top view: draw a concentric hexagon/circle for capnut/stud
+                cv2.circle(frame, (640 + offset, 360), 120, color, 3)
+                # Draw internal thread circle
+                cv2.circle(frame, (640 + offset, 360), 60, (150, 150, 150), 2)
+            else:
+                # Side view: draw a rectangular bolt-like shape
+                cv2.rectangle(frame, (540, 240 + offset), (740, 480 + offset), color, 3)
+                # Thread ridges
+                for y in range(280, 450, 20):
+                    cv2.line(frame, (540, y + offset), (740, y + offset), (150, 150, 150), 2)
+
+            # Labels and info
+            cv2.putText(frame, f"SIMULATED | {label} | Serial {self.serial}", (30, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
+            cv2.putText(frame, f"Exp: {self.exposure}us | Gain: {self.gain}dB", (30, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+            cv2.putText(frame, f"Frame: {self._counter} | FPS: {self.fps}", (30, 130),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+            
+            # Timestamp
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            cv2.putText(frame, ts, (950, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 180, 180), 2)
+
+            return frame
+
+    def close(self):
+        self.opened = False
+        print(f"[Simulated CAM {self.serial}] Closed.")
+
+
 # ── Main ────────────────────────────────────────────────────────────────────────
 
 def main():
@@ -408,8 +486,19 @@ def main():
         print("=" * 60)
 
         # Open cameras
-        top_cam.open()
-        side_cam.open()
+        try:
+            top_cam.open()
+        except Exception as e:
+            print(f"[MAIN] Failed to open physical TOP camera, using simulated camera. Error: {e}")
+            top_cam = SimulatedCamera(args.top_serial, args.top_exposure, args.top_gain, args.fps)
+            top_cam.open()
+
+        try:
+            side_cam.open()
+        except Exception as e:
+            print(f"[MAIN] Failed to open physical SIDE camera, using simulated camera. Error: {e}")
+            side_cam = SimulatedCamera(args.side_serial, args.side_exposure, args.side_gain, args.fps)
+            side_cam.open()
 
         # Apply optional part preset
         if args.part:
