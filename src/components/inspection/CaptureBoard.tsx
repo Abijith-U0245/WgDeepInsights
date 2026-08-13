@@ -92,20 +92,20 @@ export function CaptureBoard({
           <p className="type-caption mb-2 text-muted-foreground">
             {frames.length} frame{frames.length > 1 ? "s" : ""} ready
           </p>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div className="flex flex-row gap-3 overflow-x-auto pb-2">
             {frames.map((f) => (
               <div
                 key={f.id}
-                className="group relative aspect-square overflow-hidden rounded-lg border border-border"
+                className="group relative aspect-square w-20 h-20 shrink-0 overflow-hidden rounded-lg border border-border"
               >
                 <img src={f.preview} alt="Captured frame preview" className="size-full object-cover" />
                 <button
                   type="button"
                   onClick={() => onChange(frames.filter((x) => x.id !== f.id))}
-                  className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-foreground/70 text-background opacity-0 transition-opacity group-hover:opacity-100"
+                  className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-foreground/70 text-background opacity-0 transition-opacity group-hover:opacity-100"
                   aria-label="Remove frame"
                 >
-                  <X className="size-3.5" />
+                  <X className="size-3" />
                 </button>
               </div>
             ))}

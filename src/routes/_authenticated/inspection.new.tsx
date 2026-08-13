@@ -175,6 +175,83 @@ function NewInspectionPage() {
     }
   }
 
+  const snapshotEntries = useMemo(() => {
+    return testRuns.flatMap((run, runIndex) => {
+      const entries: Array<{ id: string; runIndex: number; camera: "top" | "side"; preview: string }> = [];
+
+      if (run.top_measure_b64) {
+        entries.push({
+          id: `run-${runIndex}-top-measure`,
+          runIndex,
+          camera: "top",
+          preview: `data:image/jpeg;base64,${run.top_measure_b64}`,
+        });
+      }
+      if (run.side_measure_b64) {
+        entries.push({
+          id: `run-${runIndex}-side-measure`,
+          runIndex,
+          camera: "side",
+          preview: `data:image/jpeg;base64,${run.side_measure_b64}`,
+        });
+      }
+      if (run.top_inspect_b64) {
+        entries.push({
+          id: `run-${runIndex}-top-inspect`,
+          runIndex,
+          camera: "top",
+          preview: `data:image/jpeg;base64,${run.top_inspect_b64}`,
+        });
+      }
+      if (run.side_inspect_b64) {
+        entries.push({
+          id: `run-${runIndex}-side-inspect`,
+          runIndex,
+          camera: "side",
+          preview: `data:image/jpeg;base64,${run.side_inspect_b64}`,
+        });
+      }
+
+      return entries;
+    });
+  }, [testRuns]);
+
+  const totalCapturedCount = snapshotEntries.length;
+
+  function removeSnapshot(id: string) {
+    const target = snapshotEntries.find((entry) => entry.id === id);
+    if (!target) return;
+
+    setTestRuns((prev) =>
+      prev.map((run, runIndex) => {
+        if (runIndex !== target.runIndex) return run;
+
+        const next = { ...run };
+
+        if (target.camera === "top") {
+          if (id.endsWith("-top-measure")) next.top_measure_b64 = "";
+          if (id.endsWith("-top-inspect")) next.top_inspect_b64 = "";
+        }
+
+        if (target.camera === "side") {
+          if (id.endsWith("-side-measure")) next.side_measure_b64 = "";
+          if (id.endsWith("-side-inspect")) next.side_inspect_b64 = "";
+        }
+
+        return next;
+      }),
+    );
+  }
+
+  function handleVerifyInspection() {
+    if (totalCapturedCount === 0) {
+      toast.error("Capture at least one image before verifying the inspection.");
+      return;
+    }
+
+    toast.success("Inspection verified.");
+  }
+
   // Compile final results across all captured runs
   const allMeasurements = useMemo(() => testRuns.flatMap((r) => r.measurements), [testRuns]);
   const allDefects = useMemo(() => testRuns.flatMap((r) => r.defects), [testRuns]);
@@ -334,8 +411,6 @@ function NewInspectionPage() {
   return (
     <AppShell title="New Inspection" subtitle="Guided measurement and surface check workflow">
       <div className="space-y-5">
-        <Stepper step={step} />
-
         {step === 0 && (
           <SectionCard title="Select part" subtitle="Choose the part family being inspected">
             {partsLoading ? (
@@ -420,110 +495,150 @@ function NewInspectionPage() {
               {backendStatus === "checking" && <><Loader2 className="size-4 animate-spin" /> Connecting to Python backend…</>}
             </div>
 
-            {/* ── Live camera feed strip ──────────────────────────────────── */}
-            <SectionCard
-              title="Live Camera Feeds"
-              subtitle="Top view (left) · Side view (right) — real-time feed"
-              action={
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setFeedMode("measure")}
-                    className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
-                      feedMode === "measure" ? "bg-brand-blue text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                    )}
-                  >📐 Measure feed</button>
-                  <button
-                    onClick={() => setFeedMode("inspect")}
-                    className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
-                      feedMode === "inspect" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                    )}
-                  >🔍 Inspect feed</button>
-                </div>
-              }
-            >
-              {backendStatus !== "offline" ? (
-                <img
-                  src={feedMode === "measure"
-                    ? measureStreamUrl(part?.part_name ?? "capnut")
-                    : inspectStreamUrl(part?.part_name ?? "capnut")
-                  }
-                  alt="Live camera feed"
-                  className="w-full rounded-xl border border-border object-contain bg-muted"
-                  style={{ maxHeight: 320 }}
-                />
-              ) : (
-                <div className="flex h-52 w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/30">
-                  <div className="text-center">
-                    <Camera className="mx-auto mb-2 size-10 text-muted-foreground/40" />
-                    <p className="type-body-s text-muted-foreground">Camera feed unavailable — backend offline</p>
+            <div className="space-y-4">
+              <SectionCard
+                title="Live inspection Camera"
+                subtitle="CAM 1 / Top view • CAM 2 / Side view"
+                action={
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setFeedMode("measure")}
+                      className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
+                        feedMode === "measure" ? "bg-brand-blue text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      Measure feed
+                    </button>
+                    <button
+                      onClick={() => setFeedMode("inspect")}
+                      className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
+                        feedMode === "inspect" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      Inspect feed
+                    </button>
+                    <button
+                      id="btn-inspect-part"
+                      onClick={handleInspectPart}
+                      disabled={running !== null || backendStatus === "offline" || testRuns.length >= 5}
+                      className={cn(
+                        "rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60",
+                      )}
+                    >
+                      {running === "inspect" ? <Loader2 className="size-4 animate-spin" /> : "Capture Image"}
+                    </button>
                   </div>
-                </div>
-              )}
-            </SectionCard>
-
-            {/* ── Action capture panel ────────────────────────────────────── */}
-            <div className="grid gap-4 sm:grid-cols-2 items-center">
-              <button
-                id="btn-inspect-part"
-                onClick={handleInspectPart}
-                disabled={running !== null || backendStatus === "offline" || testRuns.length >= 5}
-                className={cn(
-                  "group flex flex-col items-center gap-3 rounded-2xl border-2 p-6 text-center transition-all min-h-40 justify-center",
-                  testRuns.length > 0
-                    ? finalStatus === "ok"
-                      ? "border-emerald-500/50 bg-emerald-500/10"
-                      : "border-rose-500/50 bg-rose-500/10"
-                    : "border-border bg-card hover:border-brand-blue/50 hover:bg-brand-blue-subtle",
-                  (running !== null || backendStatus === "offline" || testRuns.length >= 5) && "cursor-not-allowed opacity-60",
-                )}
+                }
               >
-                {running === "inspect" ? (
-                  <Loader2 className="size-10 animate-spin text-brand-blue" />
-                ) : (
-                  <Camera className="size-10 text-brand-blue transition-transform duration-200 group-hover:scale-110" />
-                )}
-                <div>
-                  <p className="type-body-m font-bold text-foreground">📷 Inspect Part</p>
-                  <p className="type-caption text-muted-foreground mt-1">
-                    {testRuns.length > 0
-                      ? `Captured: ${testRuns.length} / 5 snapshots`
-                      : "Capture snapshot to measure and inspect"
-                    }
-                  </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {[
+                    { label: "CAM 1 / Top view", url: feedMode === "measure" ? measureStreamUrl(part?.part_name ?? "capnut") : inspectStreamUrl(part?.part_name ?? "capnut") },
+                    { label: "CAM 2 / Side view", url: feedMode === "measure" ? measureStreamUrl(part?.part_name ?? "capnut") : inspectStreamUrl(part?.part_name ?? "capnut") },
+                  ].map((camera) => (
+                    <div
+                      key={camera.label}
+                      className="relative overflow-hidden rounded-xl border border-border bg-muted/30"
+                    >
+                      {backendStatus !== "offline" ? (
+                        <img
+                          src={camera.url}
+                          alt={`${camera.label} live camera feed`}
+                          className="h-[280px] w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-[280px] w-full items-center justify-center border border-dashed border-border bg-muted/30">
+                          <div className="text-center">
+                            <Camera className="mx-auto mb-2 size-10 text-muted-foreground/40" />
+                            <p className="type-body-s text-muted-foreground">Camera feed unavailable — backend offline</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="absolute inset-x-3 bottom-3 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground backdrop-blur-sm">
+                        {camera.label}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </button>
+              </SectionCard>
 
-              {/* Status and runs selector */}
-              {testRuns.length > 0 && (
-                <div className="surface-card rounded-2xl p-6 min-h-40 flex flex-col justify-between">
-                  <div>
-                    <h4 className="type-body-m font-bold text-foreground">Capture check runs</h4>
-                    <p className="type-caption text-muted-foreground mt-0.5">Toggle between saved images to view details</p>
+              <div className="space-y-3">
+                <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-foreground">CAM 1 (TOP)</span>
+                    <span className="text-xs text-muted-foreground">
+                      {snapshotEntries.filter((entry) => entry.camera === "top").length} images
+                    </span>
                   </div>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {testRuns.map((run, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setSelectedRunIdx(idx)}
-                        className={cn(
-                          "rounded-lg px-3 py-1.5 text-xs font-semibold border transition-all flex items-center gap-1.5",
-                          selectedRunIdx === idx
-                            ? "bg-brand-blue border-brand-blue text-white shadow-sm"
-                            : "bg-background border-border text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        Run {idx + 1}
-                        {run.verdict === "ok" ? (
-                          <span className="size-2 rounded-full bg-emerald-400" />
-                        ) : (
-                          <span className="size-2 rounded-full bg-rose-400" />
-                        )}
-                      </button>
-                    ))}
+                  <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+                    {snapshotEntries.filter((entry) => entry.camera === "top").length === 0 ? (
+                      <div className="flex min-h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+                        No top-view snapshots yet
+                      </div>
+                    ) : (
+                      snapshotEntries
+                        .filter((entry) => entry.camera === "top")
+                        .map((frame) => (
+                          <div key={frame.id} className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                            <img src={frame.preview} alt="Top camera snapshot" className="size-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeSnapshot(frame.id)}
+                              className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-foreground/75 text-background opacity-0 transition-opacity group-hover:opacity-100"
+                              aria-label="Remove top snapshot"
+                            >
+                              <XCircle className="size-3" />
+                            </button>
+                          </div>
+                        ))
+                    )}
                   </div>
                 </div>
-              )}
+
+                <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-foreground">CAM 2 (SIDE)</span>
+                    <span className="text-xs text-muted-foreground">
+                      {snapshotEntries.filter((entry) => entry.camera === "side").length} images
+                    </span>
+                  </div>
+                  <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+                    {snapshotEntries.filter((entry) => entry.camera === "side").length === 0 ? (
+                      <div className="flex min-h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+                        No side-view snapshots yet
+                      </div>
+                    ) : (
+                      snapshotEntries
+                        .filter((entry) => entry.camera === "side")
+                        .map((frame) => (
+                          <div key={frame.id} className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                            <img src={frame.preview} alt="Side camera snapshot" className="size-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeSnapshot(frame.id)}
+                              className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-foreground/75 text-background opacity-0 transition-opacity group-hover:opacity-100"
+                              aria-label="Remove side snapshot"
+                            >
+                              <XCircle className="size-3" />
+                            </button>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3">
+                <p className="text-sm font-medium text-foreground">
+                  {totalCapturedCount} image{totalCapturedCount === 1 ? "" : "s"} captured
+                </p>
+                <button
+                  type="button"
+                  onClick={handleVerifyInspection}
+                  className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600"
+                >
+                  Verify Inspection
+                </button>
+              </div>
             </div>
 
             {/* ── Results panels ──────────────────────────────────────────── */}

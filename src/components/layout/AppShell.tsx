@@ -6,22 +6,22 @@ import {
   Box,
   ChevronsLeft,
   ClipboardCheck,
-  Cpu,
   FileText,
   History,
   LayoutDashboard,
   LogOut,
   Menu,
-  Ruler,
   Settings,
   Users,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import { WgLogo } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { MOCK_SESSION_STORAGE_KEY, useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+
+// 👇 Here is where we pull in your new custom image!
+import myLogo from "../../assets/logo.png"; 
 
 type NavItem = {
   to: string;
@@ -31,13 +31,12 @@ type NavItem = {
   badge?: number;
 };
 
+// 👇 "Programs" and "Specifications" have been cleanly removed from this list
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/inspection", label: "Inspection", icon: ClipboardCheck },
   { to: "/analytics", label: "Analytics", icon: BarChart3, managerOnly: true },
   { to: "/history", label: "History", icon: History },
-  { to: "/models", label: "Programs", icon: Cpu, managerOnly: true },
-  { to: "/specifications", label: "Specifications", icon: Ruler },
   { to: "/parts", label: "Parts", icon: Box, managerOnly: true },
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/users", label: "Users", icon: Users, managerOnly: true },
@@ -86,8 +85,10 @@ export function AppShell({
         collapsed ? "w-19" : "w-62",
       )}
     >
-      <div className="flex h-16 items-center px-4">
-        <WgLogo compact={collapsed} />
+      
+      {/* 👇 We reduced the padding and set the width to full so it fills the box nicely */}
+      <div className="flex h-20 items-center justify-center px-4 py-2 border-b border-sidebar-border">
+        {!collapsed && <img src={myLogo} alt="WGDeepInsight Logo" className="w-full h-auto max-h-14 object-contain" />}
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
