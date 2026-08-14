@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Users } from "lucide-react";
@@ -20,6 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useProfiles } from "@/hooks/useInspectionData";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/users")({
@@ -35,8 +36,16 @@ export const Route = createFileRoute("/_authenticated/users")({
 });
 
 function UsersPage() {
+  const navigate = useNavigate();
+  const { isManager } = useAuth();
   const queryClient = useQueryClient();
   const { data: people = [] } = useProfiles();
+
+  useEffect(() => {
+    if (isManager) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [isManager, navigate]);
 
   // Add User State
   const [addOpen, setAddOpen] = useState(false);

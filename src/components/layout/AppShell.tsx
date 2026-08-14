@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   BarChart3,
+  BookOpen,
   Box,
   ChevronsLeft,
   ClipboardCheck,
@@ -11,7 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  Settings,
+  ShieldHalf,
   Users,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -33,14 +34,15 @@ type NavItem = {
 
 // 👇 "Programs" and "Specifications" have been cleanly removed from this list
 const NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/inspection", label: "Inspection", icon: ClipboardCheck },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, managerOnly: true },
-  { to: "/history", label: "History", icon: History },
-  { to: "/parts", label: "Parts", icon: Box, managerOnly: true },
-  { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/users", label: "Users", icon: Users, managerOnly: true },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/dashboard",      label: "Dashboard",        icon: LayoutDashboard },
+  { to: "/inspection/new",  label: "Inspection",        icon: ClipboardCheck },
+  { to: "/analytics",      label: "Analytics",         icon: BarChart3,   managerOnly: true },
+  { to: "/history",    label: "History",           icon: History },
+  { to: "/parts",      label: "Parts",             icon: Box,         managerOnly: true },
+  { to: "/reports",    label: "Reports",           icon: FileText },
+  { to: "/design",     label: "Solution Design",   icon: ShieldHalf,  managerOnly: true },
+  { to: "/docs",       label: "Documentation",     icon: BookOpen },
+  { to: "/users",      label: "Users",             icon: Users,       managerOnly: true },
 ];
 
 export function AppShell({
@@ -62,7 +64,7 @@ export function AppShell({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const items = NAV.filter((item) => {
-    if (isManager && item.to === "/inspection") return false;
+    if (isManager && (item.to.startsWith("/inspection") || item.to === "/users")) return false;
     return !item.managerOnly || isManager;
   });
   const initials = (name || user?.email || "U").slice(0, 1).toUpperCase();
@@ -153,7 +155,7 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-border bg-card/95 px-4 py-3 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-30 flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-border bg-card/95 px-4 py-2 backdrop-blur md:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
@@ -176,13 +178,13 @@ export function AppShell({
               <Activity className="size-3" />
               {role === "inspection_manager" ? "Inspection Manager" : "Inspector"}
             </span>
-            <span className="flex size-9 items-center justify-center rounded-full bg-brand-blue type-body-m font-semibold text-primary-foreground">
+            <span className="flex size-8 items-center justify-center rounded-full bg-brand-blue type-body-m font-semibold text-primary-foreground">
               {initials}
             </span>
           </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 p-3 md:p-4.5">{children}</main>
       </div>
     </div>
   );

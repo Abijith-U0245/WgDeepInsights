@@ -134,9 +134,18 @@ function ReportDetailPage() {
             {data.images.length === 0 ? (
               <p className="type-body-m text-muted-foreground">No frames stored for this inspection.</p>
             ) : (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {data.images.map((img) => (
-                  <StorageImage key={img.id} refValue={img.image_url} alt={img.image_type} className="aspect-square w-full rounded-lg object-cover" />
+                  <div key={img.id} className="space-y-1 rounded-lg border border-border bg-muted/20 p-1.5">
+                    <p className="text-[11px] font-mono text-muted-foreground truncate capitalize">
+                      {img.image_type.replace(/_/g, " ")}
+                    </p>
+                    <StorageImage
+                      refValue={img.image_url}
+                      alt={img.image_type}
+                      className="aspect-square w-full rounded-md object-contain bg-black"
+                    />
+                  </div>
                 ))}
               </div>
             )}

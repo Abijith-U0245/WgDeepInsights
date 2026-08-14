@@ -14,11 +14,12 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedDesignRouteImport } from './routes/_authenticated/design'
+import { Route as AuthenticatedDocsRouteImport } from './routes/_authenticated/docs'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedModelsRouteImport } from './routes/_authenticated/models'
 import { Route as AuthenticatedPartsRouteImport } from './routes/_authenticated/parts'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
-import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSpecificationsRouteImport } from './routes/_authenticated/specifications'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as ApiInspectRouteImport } from './routes/api/inspect'
@@ -52,6 +53,16 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDesignRoute = AuthenticatedDesignRouteImport.update({
+  id: '/design',
+  path: '/design',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDocsRoute = AuthenticatedDocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
   id: '/history',
   path: '/history',
@@ -70,11 +81,6 @@ const AuthenticatedPartsRoute = AuthenticatedPartsRouteImport.update({
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSpecificationsRoute =
@@ -126,11 +132,12 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/design': typeof AuthenticatedDesignRoute
+  '/docs': typeof AuthenticatedDocsRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/parts': typeof AuthenticatedPartsRoute
   '/reports': typeof AuthenticatedReportsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
   '/specifications': typeof AuthenticatedSpecificationsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/api/inspect': typeof ApiInspectRoute
@@ -145,11 +152,12 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/design': typeof AuthenticatedDesignRoute
+  '/docs': typeof AuthenticatedDocsRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/models': typeof AuthenticatedModelsRoute
   '/parts': typeof AuthenticatedPartsRoute
   '/reports': typeof AuthenticatedReportsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
   '/specifications': typeof AuthenticatedSpecificationsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/api/inspect': typeof ApiInspectRoute
@@ -166,11 +174,12 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/design': typeof AuthenticatedDesignRoute
+  '/_authenticated/docs': typeof AuthenticatedDocsRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/models': typeof AuthenticatedModelsRoute
   '/_authenticated/parts': typeof AuthenticatedPartsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
-  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/specifications': typeof AuthenticatedSpecificationsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/api/inspect': typeof ApiInspectRoute
@@ -187,11 +196,12 @@ export interface FileRouteTypes {
     | '/auth'
     | '/analytics'
     | '/dashboard'
+    | '/design'
+    | '/docs'
     | '/history'
     | '/models'
     | '/parts'
     | '/reports'
-    | '/settings'
     | '/specifications'
     | '/users'
     | '/api/inspect'
@@ -206,11 +216,12 @@ export interface FileRouteTypes {
     | '/auth'
     | '/analytics'
     | '/dashboard'
+    | '/design'
+    | '/docs'
     | '/history'
     | '/models'
     | '/parts'
     | '/reports'
-    | '/settings'
     | '/specifications'
     | '/users'
     | '/api/inspect'
@@ -226,11 +237,12 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/analytics'
     | '/_authenticated/dashboard'
+    | '/_authenticated/design'
+    | '/_authenticated/docs'
     | '/_authenticated/history'
     | '/_authenticated/models'
     | '/_authenticated/parts'
     | '/_authenticated/reports'
-    | '/_authenticated/settings'
     | '/_authenticated/specifications'
     | '/_authenticated/users'
     | '/api/inspect'
@@ -287,6 +299,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/design': {
+      id: '/_authenticated/design'
+      path: '/design'
+      fullPath: '/design'
+      preLoaderRoute: typeof AuthenticatedDesignRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/docs': {
+      id: '/_authenticated/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof AuthenticatedDocsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/history': {
       id: '/_authenticated/history'
       path: '/history'
@@ -313,13 +339,6 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof AuthenticatedReportsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/specifications': {
@@ -384,11 +403,12 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDesignRoute: typeof AuthenticatedDesignRoute
+  AuthenticatedDocsRoute: typeof AuthenticatedDocsRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedModelsRoute: typeof AuthenticatedModelsRoute
   AuthenticatedPartsRoute: typeof AuthenticatedPartsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
-  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSpecificationsRoute: typeof AuthenticatedSpecificationsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedInspectionNewRoute: typeof AuthenticatedInspectionNewRoute
@@ -399,11 +419,12 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDesignRoute: AuthenticatedDesignRoute,
+  AuthenticatedDocsRoute: AuthenticatedDocsRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedModelsRoute: AuthenticatedModelsRoute,
   AuthenticatedPartsRoute: AuthenticatedPartsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
-  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSpecificationsRoute: AuthenticatedSpecificationsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedInspectionNewRoute: AuthenticatedInspectionNewRoute,

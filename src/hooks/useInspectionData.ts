@@ -155,6 +155,16 @@ export function useModels(partId?: string, partName?: string) {
   });
 }
 
+export type DefectResult = {
+  id: string;
+  inspection_id: string;
+  defect_name: string;
+  confidence: number;
+  annotated_image: string | null;
+  status: string;
+  created_at?: string;
+};
+
 export function useInspections() {
   return useQuery({
     queryKey: ["inspections"],
@@ -166,6 +176,20 @@ export function useInspections() {
         .limit(500);
       if (error) throw error;
       return data as Inspection[];
+    },
+  });
+}
+
+export function useAllDefectResults() {
+  return useQuery({
+    queryKey: ["defect_results_all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("defect_results")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DefectResult[];
     },
   });
 }

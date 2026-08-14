@@ -20,6 +20,7 @@ export type MeasurementRow = {
   tolerance: number;
   unit: string;
   pass: boolean;
+  pair_index?: number;
   // legacy aliases kept for Supabase insert
   actual?: number;
   deviation?: number;
@@ -31,6 +32,20 @@ export type DefectRow = {
   confidence: number;
   bbox: [number, number, number, number];
   cam: "TOP VIEW" | "SIDE VIEW";
+  pair_index?: number;
+};
+
+export type ModelAccuracy = {
+  top_conf: number;
+  side_conf: number;
+  avg_conf: number;
+};
+
+export type StageTimings = {
+  grab_ms:    number;
+  measure_ms: number;
+  inspect_ms: number;
+  total_ms:   number;
 };
 
 export type MeasureResult = {
@@ -39,26 +54,53 @@ export type MeasureResult = {
   top_annotated_b64: string;
   side_annotated_b64: string;
   duration_ms: number;
+  stage_timings?: Partial<StageTimings>;
 };
 
 export type InspectResult = {
   status: "pass" | "reject";
+  part_detected: boolean;
   defects: DefectRow[];
+  model_accuracy: ModelAccuracy;
   top_annotated_b64: string;
   side_annotated_b64: string;
   duration_ms: number;
+  stage_timings?: Partial<StageTimings>;
 };
 
 export type RunTestResult = {
   verdict: "ok" | "reject";
+  rejection_reason: null | "part_not_recognized" | "measurement_fail" | "defect_detected" | "measurement_fail_and_defect_detected";
   measure_status: "PASS" | "FAIL";
   inspect_status: "pass" | "reject";
   measurements: MeasurementRow[];
   defects: DefectRow[];
+  model_accuracy: ModelAccuracy;
+  stage_timings: StageTimings;
   top_measure_b64: string;
   side_measure_b64: string;
   top_inspect_b64: string;
   side_inspect_b64: string;
+  duration_ms: number;
+};
+
+export type BatchAnnotatedFrame = {
+  pair_index: number;
+  top_measure_b64: string;
+  side_measure_b64: string;
+  top_inspect_b64: string;
+  side_inspect_b64: string;
+  measure_status: "PASS" | "FAIL";
+  inspect_status: "pass" | "reject";
+  pass: boolean;
+};
+
+export type RunBatchTestResult = {
+  verdict: "ok" | "reject";
+  total_pairs: number;
+  annotated_frames: BatchAnnotatedFrame[];
+  measurements: MeasurementRow[];
+  defects: DefectRow[];
   duration_ms: number;
 };
 
@@ -86,6 +128,26 @@ export function measureStreamUrl(partName: string): string {
 export function inspectStreamUrl(partName: string): string {
   const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
   return `http://${host}:8000/stream/${encodeURIComponent(partName.toLowerCase())}/inspect`;
+}
+
+export function topStreamUrl(partName: string): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/stream/${encodeURIComponent(partName.toLowerCase())}/top`;
+}
+
+export function sideStreamUrl(partName: string): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/stream/${encodeURIComponent(partName.toLowerCase())}/side`;
+}
+
+export function topCaptureUrl(partName: string): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/capture/${encodeURIComponent(partName.toLowerCase())}/top`;
+}
+
+export function sideCaptureUrl(partName: string): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/capture/${encodeURIComponent(partName.toLowerCase())}/side`;
 }
 
 // ── Trigger calls ──────────────────────────────────────────────────────────
@@ -117,13 +179,27 @@ export async function runFullTest(partName: string): Promise<RunTestResult> {
   return pyPost<RunTestResult>(`/run-test/${encodeURIComponent(key)}`);
 }
 
+/** Trigger background AI processing immediately when user captures a pair */
+export async function processPair(partName: string, pairIndex: number): Promise<{ status: string; pair_index: number }> {
+  const key = partName.toLowerCase();
+  return pyPost<{ status: string; pair_index: number }>(`/process-pair/${encodeURIComponent(key)}?pair_index=${pairIndex}`);
+}
+
+/** Run multi-pair batch inspection for N captured image pairs. */
+export async function runBatchTest(partName: string, count: number): Promise<RunBatchTestResult> {
+  const key = partName.toLowerCase();
+  return pyPost<RunBatchTestResult>(`/run-test-batch/${encodeURIComponent(key)}?count=${count}`);
+}
+
+
 // ── Normalise helpers (for Supabase inserts) ──────────────────────────────
 
 /** Convert MeasurementRow to the Supabase measurement_results shape. */
 export function toSupabaseMeasurement(m: MeasurementRow) {
   const deviation = Number((m.measured - m.expected).toFixed(4));
+  const paramName = m.pair_index ? `Pair #${m.pair_index} · ${m.parameter}` : m.parameter;
   return {
-    parameter: m.parameter,
+    parameter: paramName,
     expected:  m.expected,
     actual:    m.measured,
     deviation,
@@ -135,8 +211,9 @@ export function toSupabaseMeasurement(m: MeasurementRow) {
 
 /** Convert DefectRow to the Supabase defect_results shape. */
 export function toSupabaseDefect(d: DefectRow) {
+  const defectName = d.pair_index ? `Pair #${d.pair_index} · ${d.name} (${d.cam})` : `${d.name} (${d.cam})`;
   return {
-    defect_name:     d.name,
+    defect_name:     defectName,
     confidence:      d.confidence,
     annotated_image: null as string | null,
     status:          "reject" as const,

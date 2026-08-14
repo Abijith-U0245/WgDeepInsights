@@ -1,152 +1,98 @@
 """
-camera_manager.py — Singleton RTSP camera manager (SBU / Rockchip board).
+camera_manager.py — Singleton Hikrobot GigE camera manager.
 
-On the SBU the GigE cameras are NOT directly connected — instead the LAP
-publishes two RTSP streams via MediaMTX, and this manager pulls those streams
-using OpenCV VideoCapture over the LAN.
-
-RTSP URLs are configured via environment variables (or fall back to localhost
-for local development when both processes run on the same machine):
-
-    RTSP_TOP_URL   = rtsp://<LAP_IP>:8554/top    (default: rtsp://127.0.0.1:8554/top)
-    RTSP_SIDE_URL  = rtsp://<LAP_IP>:8554/side   (default: rtsp://127.0.0.1:8554/side)
-
-The public API is identical to the original GVCP-based manager so that
-main.py, part_runners.py, and all other callers need zero changes:
-
-    from camera_manager import CameraManager
-    mgr = CameraManager.instance()
-    top_frame, side_frame = mgr.grab_pair()
+Keeps both cameras open for the lifetime of the server process so every
+part script can grab frames without re-initialising hardware.
+Includes continuous background frame caching to support smooth concurrent MJPEG web streams.
 """
 
-import os
+import sys
+import ctypes
 import threading
 import time
+import os
 import numpy as np
 import cv2
 
-# ── RTSP URL configuration ────────────────────────────────────────────────────
-RTSP_TOP_URL  = os.environ.get("RTSP_TOP_URL",  "rtsp://127.0.0.1:8554/top")
-RTSP_SIDE_URL = os.environ.get("RTSP_SIDE_URL", "rtsp://127.0.0.1:8554/side")
+# ── MVS SDK path ──────────────────────────────────────────────────────────────
+_MVS_PATHS = [
+    r"C:\Program Files (x86)\MVS\Development\Samples\Python",
+    r"C:\Program Files (x86)\MVS\Development\Samples\Python\MvImport",
+    r"C:\Program Files\MVS\Development\Samples\Python",
+    r"C:\Program Files\MVS\Development\Samples\Python\MvImport",
+    r"./MvImport",
+]
+for p in _MVS_PATHS:
+    if os.path.exists(p) and p not in sys.path:
+        sys.path.insert(0, p)
 
-# How many consecutive read failures before we log a warning
-_WARN_AFTER_FAILURES = 20
+DEMO_MODE = False  # set True if cameras are not attached (returns synthetic frames)
 
-# Seconds to wait before trying to reconnect a dead capture
-_RECONNECT_DELAY = 3.0
+try:
+    from MvCameraControl_class import (
+        MV_CC_DEVICE_INFO_LIST,
+        MV_CC_DEVICE_INFO,
+        MvCamera,
+        MV_GIGE_DEVICE,
+        MV_ACCESS_Exclusive,
+        MV_ACCESS_Control,
+        MV_TRIGGER_MODE_OFF,
+        MV_FRAME_OUT_INFO_EX,
+    )
+    _MVS_AVAILABLE = True
+except ImportError:
+    try:
+        from MvImport.MvCameraControl_class import (
+            MV_CC_DEVICE_INFO_LIST,
+            MV_CC_DEVICE_INFO,
+            MvCamera,
+            MV_GIGE_DEVICE,
+            MV_ACCESS_Exclusive,
+            MV_ACCESS_Control,
+            MV_TRIGGER_MODE_OFF,
+            MV_FRAME_OUT_INFO_EX,
+        )
+        _MVS_AVAILABLE = True
+    except ImportError:
+        print("[WARN] MvImport not found — running in DEMO MODE (synthetic frames)")
+        DEMO_MODE = True
+        _MVS_AVAILABLE = False
 
-# OpenCV backend preference: FFMPEG handles RTSP well on all platforms
-_CAP_BACKEND = cv2.CAP_FFMPEG
 
-DEMO_MODE = False  # set True to bypass RTSP (returns synthetic frames)
+TOP_CAM_SERIAL  = os.environ.get("GIGE_TOP_SERIAL",  "DA5211006")
+SIDE_CAM_SERIAL = os.environ.get("GIGE_SIDE_SERIAL", "DA4265515")
 
-
-class _RTSPCapture:
-    """
-    Thread-safe wrapper around cv2.VideoCapture for a single RTSP stream.
-    Auto-reconnects if the stream drops.
-    """
-
-    def __init__(self, url: str, label: str):
-        self.url   = url
-        self.label = label
-        self._cap: cv2.VideoCapture | None = None
-        self._lock = threading.Lock()
-        self._failures = 0
-
-    def _open(self) -> bool:
-        cap = cv2.VideoCapture(self.url, _CAP_BACKEND)
-        # Lower buffer to minimise latency
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        if cap.isOpened():
-            self._cap = cap
-            self._failures = 0
-            print(f"[CAM] {self.label} RTSP connected → {self.url}")
-            return True
-        cap.release()
-        return False
-
-    def read(self) -> np.ndarray | None:
-        """Grab one frame. Returns BGR numpy array or None on failure."""
-        with self._lock:
-            if self._cap is None or not self._cap.isOpened():
-                # Try to reconnect
-                if not self._open():
-                    self._failures += 1
-                    if self._failures % _WARN_AFTER_FAILURES == 1:
-                        print(f"[CAM] {self.label} cannot connect to {self.url} "
-                              f"(attempt {self._failures})")
-                    time.sleep(_RECONNECT_DELAY)
-                    return None
-
-            ok, frame = self._cap.read()
-            if not ok or frame is None:
-                self._failures += 1
-                if self._failures % _WARN_AFTER_FAILURES == 1:
-                    print(f"[CAM] {self.label} read failed (x{self._failures}), "
-                          f"will reconnect…")
-                # Force reconnect next call
-                self._cap.release()
-                self._cap = None
-                return None
-
-            self._failures = 0
-            return frame
-
-    @property
-    def ready(self) -> bool:
-        """True if the stream is currently open and delivering frames."""
-        with self._lock:
-            return self._cap is not None and self._cap.isOpened()
-
-    def release(self):
-        with self._lock:
-            if self._cap is not None:
-                self._cap.release()
-                self._cap = None
-        print(f"[CAM] {self.label} released.")
+BUF_SIZE = 4000 * 3000 * 3  # worst-case 4K RGB buffer
 
 
 class CameraManager:
-    """
-    Thread-safe singleton that owns both RTSP camera streams.
-
-    Drop-in replacement for the original GVCP-based CameraManager —
-    the public API (grab_pair, set_parameters, ready, shutdown) is identical.
-    """
+    """Thread-safe singleton that owns both GigE cameras with background caching for live streams."""
 
     _instance: "CameraManager | None" = None
     _lock = threading.Lock()
 
     def __init__(self):
         global DEMO_MODE
+        self._cam_lock = threading.Lock()
+        self._cameras: dict[str, MvCamera] = {}        # "top" | "side" → MvCamera
+        self._data_buf = (ctypes.c_ubyte * BUF_SIZE)()
+        self._frame_info = MV_FRAME_OUT_INFO_EX() if _MVS_AVAILABLE else None
         self._demo_counter = 0
 
-        if DEMO_MODE:
-            print("[CAM] DEMO MODE — synthetic frames only.")
-            self._top_cap  = None
-            self._side_cap = None
-            return
+        # Non-blocking live stream cache
+        self._cache_lock = threading.Lock()
+        self._latest_top: "np.ndarray | None" = None
+        self._latest_side: "np.ndarray | None" = None
+        self._running = True
 
-        self._top_cap  = _RTSPCapture(RTSP_TOP_URL,  "TOP")
-        self._side_cap = _RTSPCapture(RTSP_SIDE_URL, "SIDE")
+        if not DEMO_MODE:
+            self._open_cameras()
 
-        # Probe the streams at startup — warn but don't crash if not ready yet
-        print(f"[CAM] Probing RTSP streams…")
-        print(f"[CAM]   TOP  → {RTSP_TOP_URL}")
-        print(f"[CAM]   SIDE → {RTSP_SIDE_URL}")
-
-        top_ok  = self._top_cap._open()
-        side_ok = self._side_cap._open()
-
-        if not top_ok or not side_ok:
-            print("[CAM] WARNING: One or more RTSP streams unreachable at startup. "
-                  "Will retry on first grab_pair() call.")
-            if not top_ok and not side_ok:
-                print("[CAM] Falling back to DEMO MODE (no streams available).")
-                DEMO_MODE = True
-
-    # ── Singleton ──────────────────────────────────────────────────────────────
+        # Start continuous background grab thread if hardware cameras connected
+        if not DEMO_MODE and len(self._cameras) > 0:
+            self._bg_thread = threading.Thread(target=self._bg_grab_loop, daemon=True)
+            self._bg_thread.start()
+            print("[CAM] Background frame caching thread started.")
 
     @classmethod
     def instance(cls) -> "CameraManager":
@@ -156,75 +102,232 @@ class CameraManager:
                     cls._instance = cls()
         return cls._instance
 
-    # ── Public API ─────────────────────────────────────────────────────────────
+    # ── internal ──────────────────────────────────────────────────────────────
 
-    @property
-    def ready(self) -> bool:
-        if DEMO_MODE:
-            return True
-        return (
-            self._top_cap  is not None and self._top_cap.ready and
-            self._side_cap is not None and self._side_cap.ready
-        )
+    def _open_cameras(self):
+        global DEMO_MODE
+        device_list = MV_CC_DEVICE_INFO_LIST()
+        ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, device_list)
+        if ret != 0 or device_list.nDeviceNum < 1:
+            print("[WARN] No Hikrobot cameras found — falling back to DEMO MODE")
+            DEMO_MODE = True
+            return
 
-    def set_parameters(self, part_name: str):
-        """
-        On the RTSP pipeline the SBU cannot directly set camera exposure/gain
-        (those are controlled by start_dual_rtsp.py on the LAP).
+        print(f"[CAM] Found {device_list.nDeviceNum} GigE device(s). Enumerating serial numbers...")
 
-        This method is a no-op here to preserve API compatibility with
-        part_runners.py and main.py. If you need dynamic part-switching,
-        set the --part flag on start_dual_rtsp.py or call the optional
-        LAP HTTP endpoint separately.
-        """
-        # No-op: exposure is managed on the LAP side by start_dual_rtsp.py
-        pass
+        found_serials = []
+        for i in range(device_list.nDeviceNum):
+            info = ctypes.cast(
+                device_list.pDeviceInfo[i], ctypes.POINTER(MV_CC_DEVICE_INFO)
+            ).contents
 
-    def grab_pair(self) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Return (top_frame, side_frame) as BGR numpy arrays.
-        Falls back to synthetic demo frames if either stream is unavailable.
-        """
-        if DEMO_MODE:
-            time.sleep(1 / 15)
-            return (
-                self._demo_frame("TOP VIEW",  (0, 255, 100)),
-                self._demo_frame("SIDE VIEW", (0, 180, 255)),
+            serial = ""
+            if info.nTLayerType == MV_GIGE_DEVICE:
+                for ch in info.SpecialInfo.stGigEInfo.chSerialNumber:
+                    if ch == 0:
+                        break
+                    serial += chr(ch)
+
+            found_serials.append(serial)
+            print(f"[CAM] Device #{i}: Serial '{serial}'")
+
+            cam = MvCamera()
+            r_create = cam.MV_CC_CreateHandle(info)
+            if r_create != 0:
+                print(f"[CAM] Failed CreateHandle for serial {serial}: 0x{r_create:x}")
+                continue
+
+            r_open = cam.MV_CC_OpenDevice(MV_ACCESS_Exclusive, 0)
+            if r_open != 0:
+                print(f"[CAM] Exclusive OpenDevice failed for serial {serial} (0x{r_open:x}), trying Control mode...")
+                r_open = cam.MV_CC_OpenDevice(MV_ACCESS_Control, 0)
+
+            if r_open != 0:
+                print(f"[CAM] Failed OpenDevice for serial {serial}: 0x{r_open:x}")
+                try:
+                    cam.MV_CC_DestroyHandle()
+                except Exception:
+                    pass
+                continue
+
+            pkt = cam.MV_CC_GetOptimalPacketSize()
+            if int(pkt) > 0:
+                cam.MV_CC_SetIntValue("GevSCPSPacketSize", pkt)
+
+            cam.MV_CC_SetIntValue("GevSCPD", 1000)
+            cam.MV_CC_SetBoolValue("AcquisitionFrameRateEnable", True)
+            cam.MV_CC_SetFloatValue("AcquisitionFrameRate", 15.0)
+            cam.MV_CC_SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF)
+
+            if serial == TOP_CAM_SERIAL:
+                cam.MV_CC_StartGrabbing()
+                self._cameras["top"] = cam
+                print(f"[CAM] Top camera ready ({serial})")
+
+            elif serial == SIDE_CAM_SERIAL:
+                cam.MV_CC_StartGrabbing()
+                self._cameras["side"] = cam
+                print(f"[CAM] Side camera ready ({serial})")
+
+            else:
+                cam.MV_CC_StartGrabbing()
+                if "top" not in self._cameras:
+                    self._cameras["top"] = cam
+                    print(f"[CAM] Top camera assigned via index ({serial})")
+                elif "side" not in self._cameras:
+                    self._cameras["side"] = cam
+                    print(f"[CAM] Side camera assigned via index ({serial})")
+
+        # Fallback index mapping if serials didn't match directly but cameras present
+        if "top" in self._cameras or "side" in self._cameras:
+            DEMO_MODE = False
+            print(f"[CAM] Physical cameras active: {list(self._cameras.keys())}")
+        else:
+            print("[WARN] Could not open physical cameras — DEMO MODE active")
+            DEMO_MODE = True
+
+    def _grab_one(self, which: str) -> np.ndarray | None:
+        cam = self._cameras.get(which)
+        if cam is None:
+            return None
+        with self._cam_lock:
+            ret = cam.MV_CC_GetOneFrameTimeout(
+                ctypes.byref(self._data_buf), BUF_SIZE, self._frame_info, 2000
             )
+            if ret != 0:
+                return None
+            h = self._frame_info.nHeight
+            w = self._frame_info.nWidth
+            frame_len = self._frame_info.nFrameLen
+            raw = np.frombuffer(self._data_buf, count=frame_len, dtype=np.uint8)
+            if frame_len == h * w:
+                return cv2.cvtColor(raw.reshape((h, w)), cv2.COLOR_BayerBG2BGR)
+            return raw.reshape((h, w, 3))
 
-        top  = self._top_cap.read()  if self._top_cap  else None
-        side = self._side_cap.read() if self._side_cap else None
+    def _bg_grab_loop(self):
+        """Continuously grab frames from physical cameras and update live cache."""
+        while self._running:
+            try:
+                top  = self._grab_one("top")
+                side = self._grab_one("side")
 
-        if top is None:
-            top = self._demo_frame("TOP (no frame)", (100, 100, 255))
-        if side is None:
-            side = self._demo_frame("SIDE (no frame)", (100, 100, 255))
+                if top is None and DEMO_MODE:
+                    top = self._demo_frame("TOP VIEW", (0, 255, 100))
+                if side is None and DEMO_MODE:
+                    side = self._demo_frame("SIDE VIEW", (0, 180, 255))
 
-        return top, side
+                with self._cache_lock:
+                    if top is not None:
+                        self._latest_top = top.copy()
+                    if side is not None:
+                        self._latest_side = side.copy()
 
-    def shutdown(self):
-        """Release RTSP streams on server shutdown."""
-        if self._top_cap:
-            self._top_cap.release()
-        if self._side_cap:
-            self._side_cap.release()
-        print("[CAM] Camera manager shut down.")
-
-    # ── Internal ───────────────────────────────────────────────────────────────
+            except Exception as e:
+                print(f"[CAM] Background grab error: {e}")
+            time.sleep(1 / 20)
 
     def _demo_frame(self, label: str, color: tuple) -> np.ndarray:
-        """Generates a synthetic frame for DEMO / testing when streams are absent."""
+        """Generates a synthetic frame for demo / testing when cameras are absent."""
         self._demo_counter += 1
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         frame[:] = (30, 30, 40)
-        cv2.putText(frame, f"DEMO — {label}",     (40, 220),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
-        cv2.putText(frame, f"frame {self._demo_counter}", (40, 270),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
-        cv2.putText(frame, "RTSP streams not connected", (40, 310),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 100, 100), 1)
-        # Moving fake bounding box
+        cv2.putText(frame, f"DEMO — {label}", (40, 220), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
+        cv2.putText(frame, f"frame {self._demo_counter}", (40, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
+        # Fake moving bounding box
         t = self._demo_counter % 120
         x = 100 + int(80 * abs(t - 60) / 60)
         cv2.rectangle(frame, (x, 150), (x + 200, 350), color, 2)
         return frame
+
+    # ── public API ────────────────────────────────────────────────────────────
+
+    @property
+    def ready(self) -> bool:
+        return DEMO_MODE or ("top" in self._cameras and "side" in self._cameras) or len(self._cameras) > 0
+
+    def set_parameters(self, part_name: str):
+        """Dynamically configure the exposure and gain for the specified part."""
+        if DEMO_MODE:
+            return
+
+        key = part_name.lower().replace("-", "").replace(" ", "")
+
+        # Preset exposure & gain settings for each part
+        presets = {
+            "capnut": {
+                "top_exposure": 3000.0, "top_gain": 1.0,
+                "side_exposure": 35000.0, "side_gain": 5.3132
+            },
+            "stud": {
+                "top_exposure": 3000.0, "top_gain": 1.0,
+                "side_exposure": 30000.0, "side_gain": 5.3132
+            },
+            "adapter": {
+                "top_exposure": 2000.0, "top_gain": 0.0,
+                "side_exposure": 30000.0, "side_gain": 5.0
+            },
+            "adaptor": {
+                "top_exposure": 2000.0, "top_gain": 0.0,
+                "side_exposure": 30000.0, "side_gain": 5.0
+            },
+            "pin": {
+                "top_exposure": 2000.0, "top_gain": 0.0,
+                "side_exposure": 35000.0, "side_gain": 7.3132
+            }
+        }
+
+        p = presets.get(key)
+        if not p:
+            return
+
+        with self._cam_lock:
+            top_cam = self._cameras.get("top")
+            side_cam = self._cameras.get("side")
+
+            if top_cam:
+                try:
+                    top_cam.MV_CC_SetEnumValue("ExposureAuto", 0)
+                    top_cam.MV_CC_SetEnumValue("GainAuto", 0)
+                    top_cam.MV_CC_SetFloatValue("ExposureTime", p["top_exposure"])
+                    top_cam.MV_CC_SetFloatValue("Gain", p["top_gain"])
+                    print(f"[CAM] Set top camera params for {key}: exp={p['top_exposure']}, gain={p['top_gain']}")
+                except Exception as e:
+                    print(f"[CAM] Failed to set top parameters for {key}: {e}")
+
+            if side_cam:
+                try:
+                    side_cam.MV_CC_SetEnumValue("ExposureAuto", 0)
+                    side_cam.MV_CC_SetEnumValue("GainAuto", 0)
+                    side_cam.MV_CC_SetFloatValue("ExposureTime", p["side_exposure"])
+                    side_cam.MV_CC_SetFloatValue("Gain", p["side_gain"])
+                    print(f"[CAM] Set side camera params for {key}: exp={p['side_exposure']}, gain={p['side_gain']}")
+                except Exception as e:
+                    print(f"[CAM] Failed to set side parameters for {key}: {e}")
+
+    def grab_pair(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return (top_frame, side_frame) — non-blocking cached reads for high-speed streaming."""
+        if DEMO_MODE:
+            time.sleep(1 / 15)
+            return (
+                self._demo_frame("TOP VIEW", (0, 255, 100)),
+                self._demo_frame("SIDE VIEW", (0, 180, 255)),
+            )
+
+        with self._cache_lock:
+            top  = self._latest_top.copy()  if self._latest_top  is not None else self._demo_frame("TOP (initializing)",  (100, 100, 255))
+            side = self._latest_side.copy() if self._latest_side is not None else self._demo_frame("SIDE (initializing)", (100, 100, 255))
+
+        return top, side
+
+    def shutdown(self):
+        self._running = False
+        with self._cam_lock:
+            for cam in self._cameras.values():
+                try:
+                    cam.MV_CC_StopGrabbing()
+                    cam.MV_CC_CloseDevice()
+                    cam.MV_CC_DestroyHandle()
+                except Exception:
+                    pass
+            self._cameras.clear()
+        print("[CAM] Cameras closed.")

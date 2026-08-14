@@ -435,11 +435,17 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     Runs YOLO surface defect detection for the specified part.
     Returns:
         {
-          "status": "pass"|"reject",
-          "defects": [{"name":..,"confidence":..,"bbox":[x1,y1,x2,y2],"cam":..}],
-          "top_annotated_b64": "<jpeg>",
+          "status":        "pass" | "reject",
+          "part_detected": bool,
+          "defects":       [{"name":..,"confidence":..,"bbox":[x1,y1,x2,y2],"cam":..}],
+          "model_accuracy": { "top_conf": float, "side_conf": float, "avg_conf": float },
+          "top_annotated_b64":  "<jpeg>",
           "side_annotated_b64": "<jpeg>",
         }
+
+    Untrained-parameter guard: if YOLO detects NO boxes at all on a frame,
+    the part is treated as unrecognised and the inspection is forced to
+    'reject' with a synthetic 'part_not_recognized' defect entry.
     """
     key = part.lower().replace("-","").replace(" ","")
     model = _get_model(key)
@@ -447,37 +453,78 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     OK_CLASSES = {"OK_Part", "okay_part", "okay_pin", "Adaptor", "Stud", "Capnut", "Pin"}
     defects: list[dict] = []
 
+    # Per-camera confidence tracking
+    top_max_conf  = 0.0
+    side_max_conf = 0.0
+    top_has_boxes  = False
+    side_has_boxes = False
+
     def _process(frame: np.ndarray, cam_label: str):
+        nonlocal top_max_conf, side_max_conf, top_has_boxes, side_has_boxes
         results = list(model(frame, stream=True, verbose=False, conf=0.25))
         ann = frame.copy()
+        cam_boxes = 0
+        cam_max_conf = 0.0
         for r in results:
-            ann = r.plot()
+            if len(r.boxes) > 0:
+                ann = r.plot()
+                cam_boxes += len(r.boxes)
             for box, cls, conf in zip(r.boxes.xyxy, r.boxes.cls, r.boxes.conf):
+                c = float(conf)
+                if c > cam_max_conf:
+                    cam_max_conf = c
                 cls_name = r.names[int(cls)]
                 if cls_name not in OK_CLASSES:
                     x1,y1,x2,y2 = map(int, box.cpu().numpy())
                     defects.append({
                         "name": cls_name,
-                        "confidence": round(float(conf), 3),
+                        "confidence": round(c, 3),
                         "bbox": [x1, y1, x2, y2],
                         "cam": cam_label,
                     })
+        if cam_label == "TOP VIEW":
+            top_max_conf  = round(cam_max_conf, 3)
+            top_has_boxes = cam_boxes > 0
+        else:
+            side_max_conf  = round(cam_max_conf, 3)
+            side_has_boxes = cam_boxes > 0
         return ann
 
     top_ann  = _process(top,  "TOP VIEW")
     side_ann = _process(side, "SIDE VIEW")
 
-    status = "pass" if len(defects) == 0 else "reject"
-    col = (0,255,0) if status=="pass" else (0,0,255)
-    label = "NO DEFECTS" if status=="pass" else f"{len(defects)} DEFECT(S)"
+    # ── Untrained parameter / unrecognised part guard ─────────────────────
+    part_detected = top_has_boxes or side_has_boxes
+    if not part_detected:
+        # No boxes found on either camera → cannot evaluate; force reject
+        defects.append({
+            "name": "part_not_recognized",
+            "confidence": 0.0,
+            "bbox": [0, 0, 0, 0],
+            "cam": "TOP VIEW",
+        })
+
+    status = "pass" if (len(defects) == 0 and part_detected) else "reject"
+    avg_conf = round((top_max_conf + side_max_conf) / 2, 3)
+
+    col   = (0,255,0) if status == "pass" else (0,0,255)
+    label = "NO DEFECTS" if status == "pass" else (
+        "NOT RECOGNIZED" if not part_detected else f"{len(defects)} DEFECT(S)"
+    )
     top_disp  = cv2.resize(top_ann,  (640,480))
     side_disp = cv2.resize(side_ann, (640,480))
     cv2.putText(top_disp,  f"INSPECT: {label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, col, 2)
     cv2.putText(side_disp, f"INSPECT: {label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, col, 2)
 
     return {
-        "status": status,
-        "defects": defects,
+        "status":         status,
+        "part_detected":  part_detected,
+        "defects":        defects,
+        "model_accuracy": {
+            "top_conf":  top_max_conf,
+            "side_conf": side_max_conf,
+            "avg_conf":  avg_conf,
+        },
         "top_annotated_b64":  _frame_to_b64(top_disp),
         "side_annotated_b64": _frame_to_b64(side_disp),
     }

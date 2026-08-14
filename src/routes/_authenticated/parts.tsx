@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -42,6 +42,9 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/parts")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    part: typeof search["part"] === "string" ? (search["part"] as string) : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Parts Management — WGDeepInsight | WG Tech" },
@@ -61,11 +64,24 @@ const TONE_STYLES = {
 };
 
 function PartsPage() {
+  const { part: searchPart } = Route.useSearch();
   const queryClient = useQueryClient();
   const { data: parts = [] } = useParts();
-  const [selected, setSelected] = useState<PartDescriptor | null>(null);
+  const [selected, setSelected] = useState<PartDescriptor | null>(() => {
+    if (searchPart) {
+      return getPartDescriptor(searchPart) ?? null;
+    }
+    return null;
+  });
   const [imgMode, setImgMode] = useState<"photo" | "drawing">("photo");
   const [expandedSpec, setExpandedSpec] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchPart) {
+      const found = getPartDescriptor(searchPart);
+      if (found) setSelected(found);
+    }
+  }, [searchPart]);
 
   // Add Part State
   const [addOpen, setAddOpen] = useState(false);

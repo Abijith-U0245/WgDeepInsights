@@ -17,10 +17,12 @@ import {
 } from "recharts";
 import {
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   ClipboardList,
   Clock,
   Crosshair,
+  Play,
   Plus,
   ScanEye,
   ScanLine,
@@ -125,16 +127,6 @@ function DashboardPage() {
     <AppShell
       title="Dashboard"
       subtitle={`Welcome back${name ? `, ${name}` : ""} · shopfloor quality overview`}
-      actions={
-        !isManager && (
-          <Button asChild size="sm">
-            <Link to="/inspection/new">
-              <Plus className="size-4" />
-              New Inspection
-            </Link>
-          </Button>
-        )
-      }
     >
       <div className="space-y-5">
         <SectionCard
@@ -144,79 +136,67 @@ function DashboardPage() {
               ? "Review history, download reports, and manage models and specifications."
               : "Select a part and model, capture frames, and run measurement plus surface inspection."
           }
-          action={
-            <div className="flex flex-wrap gap-2">
-              {isManager ? (
-                <>
-                  <Button asChild size="sm" variant="outline"><Link to="/history">History</Link></Button>
-                  <Button asChild size="sm" variant="outline"><Link to="/reports">Reports</Link></Button>
-                </>
-              ) : (
-                <Button asChild size="sm" variant="outline"><Link to="/inspection/new">Start inspection</Link></Button>
-              )}
-            </div>
-          }
         >
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="rounded-xl border border-border bg-background p-4 lg:col-span-2">
-              <div className="flex items-center justify-between">
-                <p className="type-caption uppercase tracking-wide text-muted-foreground">
-                  {isManager ? "Inspected Part Families" : "Workflow — Select a Part"}
-                </p>
-                <Link
-                  to="/parts"
-                  className="type-caption font-medium text-brand-blue-interactive hover:underline"
-                >
-                  View all →
-                </Link>
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {PART_DESCRIPTORS.map((d) => (
-                  <div key={d.key} className="group overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-md">
-                    <div className="relative overflow-hidden">
+          <div className="rounded-xl border border-border bg-background p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="type-caption uppercase tracking-wide text-muted-foreground">
+                {isManager ? "Inspected Part Families" : "Workflow — Select a Part"}
+              </p>
+              <Link
+                to="/parts"
+                className="type-caption font-medium text-brand-blue-interactive hover:underline"
+              >
+                View all →
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {PART_DESCRIPTORS.map((d) => (
+                <div key={d.key} className="group overflow-hidden rounded-xl border border-border bg-card transition-all hover:shadow-md flex flex-col justify-between">
+                  <div>
+                    <Link to={isManager ? "/analytics" : "/inspection/new"} search={isManager ? { part: d.name } : { part: d.key }} className="block relative overflow-hidden cursor-pointer">
                       <img
                         src={d.photo}
                         alt={`${d.name} part photograph`}
-                        className="h-32 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        className="h-36 w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         loading="lazy"
                       />
                       <span className="absolute left-2 top-2 rounded-full bg-background/80 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground backdrop-blur-sm">
                         {d.partNumber}
                       </span>
-                    </div>
+                    </Link>
                     <div className="p-3">
                       <p className="type-body-m font-semibold text-foreground">{d.name}</p>
                       <p className="type-body-s mt-0.5 text-muted-foreground line-clamp-1">{d.tagline}</p>
-                      {isManager ? (
-                        <p className="type-caption mt-1.5 text-muted-foreground/70 line-clamp-2">
-                          {d.inspectionFocus[0]}
-                        </p>
-                      ) : (
-                        <p className="type-caption mt-1.5 text-muted-foreground/70">
-                          {d.category}
-                        </p>
-                      )}
+                      <p className="type-caption mt-1.5 text-muted-foreground/70 line-clamp-1">
+                        {d.category}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-xl border border-border bg-background p-4">
-              <p className="type-caption uppercase tracking-wide text-muted-foreground">Quick actions</p>
-              <div className="mt-3 space-y-2">
-                {isManager ? (
-                  <>
-                    <Button asChild className="w-full justify-start" variant="outline"><Link to="/history">Open history</Link></Button>
-                    <Button asChild className="w-full justify-start" variant="outline"><Link to="/users">Manage users</Link></Button>
-                  </>
-                ) : (
-                  <>
-                    <Button asChild className="w-full justify-start" variant="outline"><Link to="/inspection/new">New inspection</Link></Button>
-                    <Button asChild className="w-full justify-start" variant="outline"><Link to="/reports">View report</Link></Button>
-                    <Button asChild className="w-full justify-start" variant="outline"><Link to="/history">My history</Link></Button>
-                  </>
-                )}
-              </div>
+
+                  <div className="border-t border-border/50 bg-muted/20 p-2 flex items-center gap-1.5">
+                    <Button asChild size="sm" variant="outline" className="h-7 text-xs flex-1 px-2">
+                      <Link to="/analytics" search={{ part: d.name }}>
+                        <BarChart3 className="mr-1 size-3 text-brand-blue" />
+                        Analytics
+                      </Link>
+                    </Button>
+                    {!isManager ? (
+                      <Button asChild size="sm" className="h-7 text-xs flex-1 px-2 bg-brand-blue hover:bg-brand-blue/90 text-white">
+                        <Link to="/inspection/new" search={{ part: d.key }}>
+                          <Play className="mr-1 size-3" />
+                          Inspect
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button asChild size="sm" variant="secondary" className="h-7 text-xs flex-1 px-2">
+                        <Link to="/parts" search={{ part: d.key }}>
+                          View Specs
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </SectionCard>
@@ -402,11 +382,13 @@ function DashboardPage() {
               <div className="flex flex-col items-center justify-center gap-3 px-5 py-14 text-center">
                 <ScanLine className="size-8 text-muted-foreground" />
                 <p className="type-body-m text-muted-foreground">
-                  No inspections yet. Start the first one to populate live metrics.
+                  No inspections yet. {isManager ? "Awaiting operator inspections." : "Start the first one to populate live metrics."}
                 </p>
-                <Button asChild size="sm">
-                  <Link to="/inspection/new">Start inspection</Link>
-                </Button>
+                {!isManager && (
+                  <Button asChild size="sm">
+                    <Link to="/inspection/new">Start inspection</Link>
+                  </Button>
+                )}
               </div>
             ) : (
               <ul className="divide-y divide-border">

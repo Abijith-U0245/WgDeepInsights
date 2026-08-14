@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import station from "@/assets/inspection-station.jpg";
+import myLogo from "@/assets/logo.png";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -122,15 +123,7 @@ function AuthPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-brand-blue-text via-brand-blue-text/85 to-primary-text/70" />
         <div className="relative flex h-full flex-col justify-between p-12">
           <div className="flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-xl bg-primary">
-              <ShieldCheck className="size-6 text-primary-foreground" />
-            </span>
-            <div>
-              <p className="type-h-s text-primary-foreground">
-                WG<span className="text-primary">DeepInsight</span>
-              </p>
-              <p className="type-overline text-primary-foreground/70">WG Tech · Detect Predict Protect</p>
-            </div>
+            <img src={myLogo} alt="WGDeepInsight Logo" className="h-14 w-auto object-contain" />
           </div>
 
           <div className="max-w-lg">

@@ -15,6 +15,7 @@ import {
   Loader2,
   PlayCircle,
   Ruler,
+  Scan,
   ScanEye,
   ScanLine,
   ShieldAlert,
@@ -28,6 +29,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { SectionCard } from "@/components/common/SectionCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PartImage } from "@/components/common/PartImage";
+import { LatencyPanel } from "@/components/common/LatencyPanel";
+import { ModelAccuracyPanel } from "@/components/common/ModelAccuracyPanel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -45,7 +48,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useModels, useParts, useSpecifications } from "@/hooks/useInspectionData";
@@ -56,17 +58,28 @@ import {
   checkBackendHealth,
   measureStreamUrl,
   inspectStreamUrl,
-  triggerMeasure,
-  triggerInspect,
+  topStreamUrl,
+  sideStreamUrl,
+  topCaptureUrl,
+  sideCaptureUrl,
   runFullTest,
+  runBatchTest,
+  processPair,
   toSupabaseMeasurement,
   toSupabaseDefect,
-  type MeasureResult,
-  type InspectResult,
+  type ModelAccuracy,
   type RunTestResult,
+  type RunBatchTestResult,
 } from "@/services/inspectionApi";
 
+type SearchParams = {
+  part?: string | undefined;
+};
+
 export const Route = createFileRoute("/_authenticated/inspection/new")({
+  validateSearch: (search: Record<string, unknown>): SearchParams => ({
+    part: typeof search["part"] === "string" ? (search["part"] as string) : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "New Inspection — WGDeepInsight | WG Tech" },
@@ -91,9 +104,10 @@ const STEPS = [
 ];
 
 function NewInspectionPage() {
+  const { part: searchPart } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, isManager } = useAuth();
 
   const [step, setStep] = useState(0);
   const [partId, setPartId] = useState<string>("");
@@ -102,12 +116,23 @@ function NewInspectionPage() {
   const [shift, setShift] = useState("A");
   const [remarks, setRemarks] = useState("");
 
+  useEffect(() => {
+    if (isManager) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [isManager, navigate]);
+
   // Backend connection status
   const [backendStatus, setBackendStatus] = useState<"ready" | "demo" | "offline" | "checking">("checking");
 
   // Captured runs list (combining both measure and inspect)
   const [testRuns, setTestRuns] = useState<RunTestResult[]>([]);
   const [running, setRunning] = useState<"inspect" | "save" | null>(null);
+
+  // Session-level accuracy tracking
+  const [sessionAccuracy, setSessionAccuracy] = useState<ModelAccuracy>({
+    top_conf: 0, side_conf: 0, avg_conf: 0,
+  });
 
   // Selected run index for detail view
   const [selectedRunIdx, setSelectedRunIdx] = useState<number>(0);
@@ -128,6 +153,22 @@ function NewInspectionPage() {
   const { data: models = [], error: modelsError, isLoading: modelsLoading } = useModels(undefined, part?.part_name);
   const { data: specs = [], error: specsError, isLoading: specsLoading } = useSpecifications(partId || undefined, part?.part_name);
 
+  // Auto-select part from URL query param (e.g. from Dashboard Inspect button) and jump straight to step 1
+  useEffect(() => {
+    if (!searchPart || parts.length === 0) return;
+    const match = parts.find(
+      (p) =>
+        p.id === searchPart ||
+        p.part_name.toLowerCase().replace(/[^a-z0-9]/g, "") === searchPart.toLowerCase().replace(/[^a-z0-9]/g, "") ||
+        p.part_name.toLowerCase().includes(searchPart.toLowerCase()) ||
+        searchPart.toLowerCase().includes(p.part_name.toLowerCase())
+    );
+    if (match) {
+      setPartId(match.id);
+      setStep(1); // Jump directly to camera inspection feed!
+    }
+  }, [searchPart, parts]);
+
   // Auto-select model ID in background
   useEffect(() => {
     if (partId && models.length > 0) {
@@ -147,29 +188,119 @@ function NewInspectionPage() {
     checkBackendHealth().then(setBackendStatus);
   }, [step]);
 
+  // Independent captured snapshot states (max 5 for Top, max 5 for Side)
+  interface SnapshotItem {
+    id: string;
+    timestamp: string;
+    preview: string;
+  }
+  const [topSnapshots, setTopSnapshots] = useState<SnapshotItem[]>([]);
+  const [sideSnapshots, setSideSnapshots] = useState<SnapshotItem[]>([]);
+  const [batchResult, setBatchResult] = useState<RunBatchTestResult | null>(null);
+
   // Reset results if part changes
   useEffect(() => {
     setTestRuns([]);
     setSelectedRunIdx(0);
+    setTopSnapshots([]);
+    setSideSnapshots([]);
+    setBatchResult(null);
   }, [partId]);
+
+  async function handleCaptureSnapshot() {
+    const ts = Date.now();
+    const currentPairCount = Math.max(topSnapshots.length, sideSnapshots.length);
+    const nextPairIndex = currentPairCount + 1;
+
+    const canCaptureTop = topSnapshots.length < 5;
+    const canCaptureSide = sideSnapshots.length < 5;
+
+    if (!canCaptureTop && !canCaptureSide) {
+      toast.error("Maximum limit of 5 snapshot pairs (10 images total) reached. Delete an image to capture more.");
+      return;
+    }
+
+    const pName = part?.part_name ?? "capnut";
+
+    // Trigger AI background pre-inference asynchronously (no delay or UI block)
+    processPair(pName, nextPairIndex).catch((err) => {
+      console.warn(`Pair #${nextPairIndex} background pre-inference status:`, err);
+    });
+
+    if (canCaptureTop) {
+      try {
+        const res = await fetch(topCaptureUrl(pName) + `?t=${ts}`);
+        if (res.ok) {
+          const blob = await res.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const b64 = reader.result as string;
+            setTopSnapshots((prev) => [
+              ...prev,
+              { id: `top-${ts}`, timestamp: new Date().toLocaleTimeString(), preview: b64 }
+            ]);
+          };
+          reader.readAsDataURL(blob);
+        }
+      } catch (err) {
+        console.error("Failed to capture top snapshot:", err);
+      }
+    }
+
+    if (canCaptureSide) {
+      try {
+        const res = await fetch(sideCaptureUrl(pName) + `?t=${ts}`);
+        if (res.ok) {
+          const blob = await res.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const b64 = reader.result as string;
+            setSideSnapshots((prev) => [
+              ...prev,
+              { id: `side-${ts}`, timestamp: new Date().toLocaleTimeString(), preview: b64 }
+            ]);
+          };
+          reader.readAsDataURL(blob);
+        }
+      } catch (err) {
+        console.error("Failed to capture side snapshot:", err);
+      }
+    }
+
+    toast.success(`Pair #${nextPairIndex} captured (AI pre-running in background).`);
+  }
+
+  function removeTopSnapshot(id: string) {
+    setTopSnapshots((prev) => prev.filter((item) => item.id !== id));
+    toast.info("Top snapshot deleted. Space now available for top camera.");
+  }
+
+  function removeSideSnapshot(id: string) {
+    setSideSnapshots((prev) => prev.filter((item) => item.id !== id));
+    toast.info("Side snapshot deleted. Space now available for side camera.");
+  }
 
   async function handleInspectPart() {
     if (!part) return;
-    if (testRuns.length >= 5) {
-      toast.error("Maximum 5 captures reached for this inspection.");
+    const totalPairs = Math.max(topSnapshots.length, sideSnapshots.length);
+    if (totalPairs === 0) {
+      toast.error("Please capture at least 1 image before running inspection.");
       return;
     }
     setRunning("inspect");
     try {
+      const bRes = await runBatchTest(part.part_name, totalPairs);
+      setBatchResult(bRes);
+
       const res = await runFullTest(part.part_name);
       setTestRuns((prev) => {
         const next = [...prev, res];
-        setSelectedRunIdx(next.length - 1); // auto-select the latest run
+        setSelectedRunIdx(next.length - 1);
         return next;
       });
-      toast.success(`Check ${testRuns.length + 1} complete.`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Inspection failed");
+      toast.success(`Batch inspection complete for ${totalPairs} captured frame pair(s).`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Inspection failed");
     } finally {
       setRunning(null);
     }
@@ -341,17 +472,25 @@ function NewInspectionPage() {
 
       const inspectionId = inspection.id as string;
 
-      if (allMeasurements.length) {
+      const finalMeasurements = (batchResult && batchResult.measurements.length > 0)
+        ? batchResult.measurements
+        : allMeasurements;
+
+      const finalDefects = (batchResult && batchResult.defects.length > 0)
+        ? batchResult.defects
+        : allDefects;
+
+      if (finalMeasurements.length) {
         await supabase.from("measurement_results").insert(
-          allMeasurements.map((m) => ({
+          finalMeasurements.map((m) => ({
             inspection_id: inspectionId,
             ...toSupabaseMeasurement(m),
           })),
         );
       }
-      if (allDefects.length) {
+      if (finalDefects.length) {
         await supabase.from("defect_results").insert(
-          allDefects.map((d) => ({
+          finalDefects.map((d) => ({
             inspection_id: inspectionId,
             ...toSupabaseDefect(d),
           })),
@@ -360,20 +499,37 @@ function NewInspectionPage() {
 
       // Upload captured top and side views from all runs
       const imagesToUpload: Array<{ b64: string; type: string }> = [];
-      testRuns.forEach((run, idx) => {
-        if (run.top_measure_b64) {
-          imagesToUpload.push({ b64: run.top_measure_b64, type: `measurement_top_${idx + 1}` });
-        }
-        if (run.side_measure_b64) {
-          imagesToUpload.push({ b64: run.side_measure_b64, type: `measurement_side_${idx + 1}` });
-        }
-        if (run.top_inspect_b64) {
-          imagesToUpload.push({ b64: run.top_inspect_b64, type: `defect_top_${idx + 1}` });
-        }
-        if (run.side_inspect_b64) {
-          imagesToUpload.push({ b64: run.side_inspect_b64, type: `defect_side_${idx + 1}` });
-        }
-      });
+      if (batchResult && batchResult.annotated_frames.length > 0) {
+        batchResult.annotated_frames.forEach((pair) => {
+          if (pair.top_measure_b64) {
+            imagesToUpload.push({ b64: pair.top_measure_b64, type: `pair_${pair.pair_index}_top_measure` });
+          }
+          if (pair.side_measure_b64) {
+            imagesToUpload.push({ b64: pair.side_measure_b64, type: `pair_${pair.pair_index}_side_measure` });
+          }
+          if (pair.top_inspect_b64) {
+            imagesToUpload.push({ b64: pair.top_inspect_b64, type: `pair_${pair.pair_index}_top_inspect` });
+          }
+          if (pair.side_inspect_b64) {
+            imagesToUpload.push({ b64: pair.side_inspect_b64, type: `pair_${pair.pair_index}_side_inspect` });
+          }
+        });
+      } else {
+        testRuns.forEach((run, idx) => {
+          if (run.top_measure_b64) {
+            imagesToUpload.push({ b64: run.top_measure_b64, type: `measurement_top_${idx + 1}` });
+          }
+          if (run.side_measure_b64) {
+            imagesToUpload.push({ b64: run.side_measure_b64, type: `measurement_side_${idx + 1}` });
+          }
+          if (run.top_inspect_b64) {
+            imagesToUpload.push({ b64: run.top_inspect_b64, type: `defect_top_${idx + 1}` });
+          }
+          if (run.side_inspect_b64) {
+            imagesToUpload.push({ b64: run.side_inspect_b64, type: `defect_side_${idx + 1}` });
+          }
+        });
+      }
 
       for (const img of imagesToUpload) {
         if (!img.b64) continue;
@@ -438,7 +594,10 @@ function NewInspectionPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => setPartId(p.id)}
+                      onClick={() => {
+                        setPartId(p.id);
+                        setStep(1);
+                      }}
                       className="flex gap-4 text-left w-full h-full"
                     >
                       <PartImage
@@ -479,171 +638,145 @@ function NewInspectionPage() {
         )}
 
         {step === 1 && (
-          <div className="space-y-4">
-
-            {/* ── Backend status bar ──────────────────────────────────────── */}
-            <div className={cn(
-              "flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium",
-              backendStatus === "ready"    && "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-              backendStatus === "demo"     && "border-amber-500/30  bg-amber-500/10  text-amber-400",
-              backendStatus === "offline"  && "border-rose-500/30   bg-rose-500/10   text-rose-400",
-              backendStatus === "checking" && "border-border bg-muted text-muted-foreground",
-            )}>
-              {backendStatus === "ready"    && <><Wifi className="size-4" /> Python backend connected — cameras ready</>}
-              {backendStatus === "demo"     && <><Wifi className="size-4" /> Python backend connected — DEMO MODE (no cameras)</>}
-              {backendStatus === "offline"  && <><WifiOff className="size-4" /> Backend offline — run <code className="mx-1 font-mono text-xs">Wg-backend/start_server.bat</code> first</>}
-              {backendStatus === "checking" && <><Loader2 className="size-4 animate-spin" /> Connecting to Python backend…</>}
-            </div>
-
-            <div className="space-y-4">
-              <SectionCard
-                title="Live inspection Camera"
-                subtitle="CAM 1 / Top view • CAM 2 / Side view"
-                action={
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setFeedMode("measure")}
-                      className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
-                        feedMode === "measure" ? "bg-brand-blue text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      Measure feed
-                    </button>
-                    <button
-                      onClick={() => setFeedMode("inspect")}
-                      className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
-                        feedMode === "inspect" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      Inspect feed
-                    </button>
-                    <button
-                      id="btn-inspect-part"
-                      onClick={handleInspectPart}
-                      disabled={running !== null || backendStatus === "offline" || testRuns.length >= 5}
-                      className={cn(
-                        "rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60",
-                      )}
-                    >
-                      {running === "inspect" ? <Loader2 className="size-4 animate-spin" /> : "Capture Image"}
-                    </button>
-                  </div>
-                }
-              >
-                <div className="grid gap-3 md:grid-cols-2">
-                  {[
-                    { label: "CAM 1 / Top view", url: feedMode === "measure" ? measureStreamUrl(part?.part_name ?? "capnut") : inspectStreamUrl(part?.part_name ?? "capnut") },
-                    { label: "CAM 2 / Side view", url: feedMode === "measure" ? measureStreamUrl(part?.part_name ?? "capnut") : inspectStreamUrl(part?.part_name ?? "capnut") },
-                  ].map((camera) => (
-                    <div
-                      key={camera.label}
-                      className="relative overflow-hidden rounded-xl border border-border bg-muted/30"
-                    >
-                      {backendStatus !== "offline" ? (
-                        <img
-                          src={camera.url}
-                          alt={`${camera.label} live camera feed`}
-                          className="h-[280px] w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-[280px] w-full items-center justify-center border border-dashed border-border bg-muted/30">
-                          <div className="text-center">
-                            <Camera className="mx-auto mb-2 size-10 text-muted-foreground/40" />
-                            <p className="type-body-s text-muted-foreground">Camera feed unavailable — backend offline</p>
-                          </div>
-                        </div>
-                      )}
-                      <div className="absolute inset-x-3 bottom-3 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground backdrop-blur-sm">
-                        {camera.label}
-                      </div>
-                    </div>
-                  ))}
+          <div className="space-y-5">
+            {/* Section 1: Live Inspection Camera (Top full-width row) */}
+            <SectionCard
+              title="Live inspection Camera"
+              subtitle="CAM 1 / Top view • CAM 2 / Side view"
+              action={
+                <div className="flex items-center gap-3">
+                  <button
+                    id="btn-capture-image"
+                    onClick={handleCaptureSnapshot}
+                    disabled={backendStatus === "offline" || (topSnapshots.length >= 5 && sideSnapshots.length >= 5)}
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
+                  >
+                    <Camera className="size-4" />
+                    Capture Image (Top: {topSnapshots.length}/5, Side: {sideSnapshots.length}/5)
+                  </button>
+                  <button
+                    id="btn-inspect-part"
+                    onClick={handleInspectPart}
+                    disabled={running !== null || backendStatus === "offline" || (topSnapshots.length === 0 && sideSnapshots.length === 0)}
+                    className="rounded-xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
+                  >
+                    {running === "inspect" ? <Loader2 className="size-4 animate-spin" /> : <Scan className="size-4" />}
+                    Inspect ({topSnapshots.length + sideSnapshots.length} image{topSnapshots.length + sideSnapshots.length === 1 ? "" : "s"})
+                  </button>
                 </div>
-              </SectionCard>
+              }
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                {[
+                  { label: "CAM 1 / TOP VIEW", url: topStreamUrl(part?.part_name ?? "capnut") },
+                  { label: "CAM 2 / SIDE VIEW", url: sideStreamUrl(part?.part_name ?? "capnut") },
+                ].map((camera) => (
+                  <div
+                    key={camera.label}
+                    className="relative h-[280px] sm:h-[320px] w-full overflow-hidden rounded-xl border border-border bg-slate-950 flex items-center justify-center shadow-inner"
+                  >
+                    {backendStatus !== "offline" ? (
+                      <img
+                        src={camera.url}
+                        alt={`${camera.label} live camera feed`}
+                        className="h-full aspect-square max-w-full object-contain bg-slate-950"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center border border-dashed border-border bg-muted/30">
+                        <div className="text-center p-4">
+                          <Camera className="mx-auto mb-2 size-10 text-muted-foreground/40" />
+                          <p className="type-body-s text-muted-foreground">Camera feed unavailable — backend offline</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="absolute inset-x-3 bottom-3 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground backdrop-blur-sm">
+                      {camera.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
 
-              <div className="space-y-3">
-                <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
+            {/* Section 2: Captured Snapshots (Middle full-width row) */}
+            <SectionCard
+              title="Captured Snapshots"
+              subtitle="Row 1: CAM 1 (Top) • Row 2: CAM 2 (Side)"
+            >
+              <div className="space-y-4">
+                {/* Row 1: CAM 1 Top View Snapshots */}
+                <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-sm font-semibold text-foreground">CAM 1 (TOP)</span>
                     <span className="text-xs text-muted-foreground">
-                      {snapshotEntries.filter((entry) => entry.camera === "top").length} images
+                      {topSnapshots.length} / 5 images
                     </span>
                   </div>
-                  <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
-                    {snapshotEntries.filter((entry) => entry.camera === "top").length === 0 ? (
-                      <div className="flex min-h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-                        No top-view snapshots yet
+                  <div className="flex gap-3 overflow-x-auto pb-1">
+                    {topSnapshots.length === 0 ? (
+                      <div className="flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+                        No top-view snapshots captured yet
                       </div>
                     ) : (
-                      snapshotEntries
-                        .filter((entry) => entry.camera === "top")
-                        .map((frame) => (
-                          <div key={frame.id} className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                            <img src={frame.preview} alt="Top camera snapshot" className="size-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => removeSnapshot(frame.id)}
-                              className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-foreground/75 text-background opacity-0 transition-opacity group-hover:opacity-100"
-                              aria-label="Remove top snapshot"
-                            >
-                              <XCircle className="size-3" />
-                            </button>
+                      topSnapshots.map((item, index) => (
+                        <div key={item.id} className="group relative aspect-square h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-black">
+                          <img src={item.preview} alt={`Top snapshot ${index + 1}`} className="size-full object-contain bg-black" />
+                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">
+                            #{index + 1}
                           </div>
-                        ))
+                          <button
+                            type="button"
+                            onClick={() => removeTopSnapshot(item.id)}
+                            className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow transition-opacity hover:bg-rose-700"
+                            aria-label="Remove top snapshot"
+                          >
+                            <XCircle className="size-3.5" />
+                          </button>
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
+                {/* Row 2: CAM 2 Side View Snapshots */}
+                <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-sm font-semibold text-foreground">CAM 2 (SIDE)</span>
                     <span className="text-xs text-muted-foreground">
-                      {snapshotEntries.filter((entry) => entry.camera === "side").length} images
+                      {sideSnapshots.length} / 5 images
                     </span>
                   </div>
-                  <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
-                    {snapshotEntries.filter((entry) => entry.camera === "side").length === 0 ? (
-                      <div className="flex min-h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-                        No side-view snapshots yet
+                  <div className="flex gap-3 overflow-x-auto pb-1">
+                    {sideSnapshots.length === 0 ? (
+                      <div className="flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+                        No side-view snapshots captured yet
                       </div>
                     ) : (
-                      snapshotEntries
-                        .filter((entry) => entry.camera === "side")
-                        .map((frame) => (
-                          <div key={frame.id} className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                            <img src={frame.preview} alt="Side camera snapshot" className="size-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => removeSnapshot(frame.id)}
-                              className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-foreground/75 text-background opacity-0 transition-opacity group-hover:opacity-100"
-                              aria-label="Remove side snapshot"
-                            >
-                              <XCircle className="size-3" />
-                            </button>
+                      sideSnapshots.map((item, index) => (
+                        <div key={item.id} className="group relative aspect-square h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-black">
+                          <img src={item.preview} alt={`Side snapshot ${index + 1}`} className="size-full object-contain bg-black" />
+                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">
+                            #{index + 1}
                           </div>
-                        ))
+                          <button
+                            type="button"
+                            onClick={() => removeSideSnapshot(item.id)}
+                            className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow transition-opacity hover:bg-rose-700"
+                            aria-label="Remove side snapshot"
+                          >
+                            <XCircle className="size-3.5" />
+                          </button>
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3">
-                <p className="text-sm font-medium text-foreground">
-                  {totalCapturedCount} image{totalCapturedCount === 1 ? "" : "s"} captured
-                </p>
-                <button
-                  type="button"
-                  onClick={handleVerifyInspection}
-                  className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600"
-                >
-                  Verify Inspection
-                </button>
-              </div>
-            </div>
+            </SectionCard>
 
             {/* ── Results panels ──────────────────────────────────────────── */}
             <AnimatePresence>
-              {testRuns.length > 0 && (() => {
+              {(() => {
+                if (testRuns.length === 0) return null;
                 const selectedRun = testRuns[selectedRunIdx];
                 if (!selectedRun) return null;
 
@@ -678,6 +811,18 @@ function NewInspectionPage() {
                           Run {selectedRunIdx + 1} Verdict: {runVerdict === "ok" ? "PART ACCEPTED" : "PART REJECTED"}
                         </h3>
                       </div>
+                      {/* Rejection reason (shown to both roles) */}
+                      {selectedRun.rejection_reason && (
+                        <p className="mt-2 text-sm text-rose-300/80 font-medium">
+                          {selectedRun.rejection_reason === "part_not_recognized"
+                            ? "⚠ Part not recognized by model — verify placement and lighting"
+                            : selectedRun.rejection_reason === "measurement_fail"
+                            ? "📐 Dimensional measurement out of tolerance"
+                            : selectedRun.rejection_reason === "defect_detected"
+                            ? "🔍 Surface defect detected"
+                            : "Measurement failure and defect detected"}
+                        </p>
+                      )}
                     </div>
 
                     {/* Run Details Panel */}
@@ -711,81 +856,185 @@ function NewInspectionPage() {
                         </div>
                       }
                     >
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        {/* Snapshots */}
-                        <div className="space-y-2">
-                          <p className="type-caption text-muted-foreground">Top View — annotated</p>
-                          <img 
-                            src={`data:image/jpeg;base64,${detailImageMode === "measure" ? selectedRun.top_measure_b64 : selectedRun.top_inspect_b64}`}
-                            alt="Top View snapshot" 
-                            className="w-full rounded-lg border border-border object-contain bg-muted" 
-                            style={{ maxHeight: 280 }}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <p className="type-caption text-muted-foreground">Side View — annotated</p>
-                          <img 
-                            src={`data:image/jpeg;base64,${detailImageMode === "measure" ? selectedRun.side_measure_b64 : selectedRun.side_inspect_b64}`}
-                            alt="Side View snapshot" 
-                            className="w-full rounded-lg border border-border object-contain bg-muted" 
-                            style={{ maxHeight: 280 }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Measurements Table & Defects List */}
-                      <div className="grid gap-6 mt-6 lg:grid-cols-3">
-                        {/* Measurements table */}
-                        <div className="lg:col-span-2 space-y-2">
-                          <h4 className="type-body-m font-bold text-foreground">Measurement parameters</h4>
-                          <div className="overflow-x-auto rounded-xl border border-border">
-                            <table className="w-full">
-                              <thead>
-                                <tr className="border-b border-border bg-muted/40">
-                                  <Th>Parameter</Th><Th>Measured</Th><Th>Expected</Th><Th>Tolerance</Th><Th>Status</Th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border">
-                                {activeMeasurements.map((m) => (
-                                  <tr key={m.parameter} className={m.pass ? "" : "bg-rose-500/5"}>
-                                    <Td className="font-medium">{m.parameter}</Td>
-                                    <Td className={cn("tabular font-semibold", m.pass ? "text-emerald-400" : "text-rose-400")}>
-                                      {m.measured} {m.unit}
-                                    </Td>
-                                    <Td className="tabular text-muted-foreground">{m.expected} {m.unit}</Td>
-                                    <Td className="tabular text-muted-foreground">±{m.tolerance} {m.unit}</Td>
-                                    <Td>{m.pass ? <CheckCircle2 className="size-4 text-emerald-400" /> : <XCircle className="size-4 text-rose-400" />}</Td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        {/* Defects list */}
-                        <div className="space-y-2">
-                          <h4 className="type-body-m font-bold text-foreground">Surface defect inspection</h4>
-                          {activeDefects.length > 0 ? (
-                            <ul className="space-y-2">
-                              {activeDefects.map((d, i) => (
-                                <li key={i} className="flex items-center justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2">
-                                  <div>
-                                    <p className="type-body-m font-semibold text-rose-300">{d.name}</p>
-                                    <p className="type-caption text-muted-foreground">{d.cam} · Conf {(d.confidence * 100).toFixed(0)}%</p>
+                      <div className="space-y-6">
+                        {batchResult && batchResult.annotated_frames.length > 0 ? (
+                          <div className="space-y-6">
+                            {/* Dimensional Analysis Frames (Pair #1 Only - 2 Frames) */}
+                            {batchResult.annotated_frames[0] && (
+                              <div className="space-y-2 rounded-xl border border-brand-blue/30 bg-brand-blue/5 p-4">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-brand-blue flex items-center gap-1.5">
+                                    📐 Dimensional Measurement Model Analysis (Pair #1 Only — 2 Frames)
+                                  </h4>
+                                  <span className="text-[11px] font-mono text-muted-foreground">Top + Side Views</span>
+                                </div>
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <span className="text-[11px] font-mono text-muted-foreground">Pair #1 Top — Dimensional Overlay</span>
+                                    <img
+                                      src={`data:image/jpeg;base64,${batchResult.annotated_frames[0].top_measure_b64}`}
+                                      alt="Pair #1 Top Measurement"
+                                      className="w-full rounded-md border border-border object-contain bg-black h-44"
+                                    />
                                   </div>
-                                  <AlertTriangle className="size-4 text-rose-400 shrink-0" />
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border bg-muted/20">
-                              <p className="text-center type-body-s text-emerald-400 flex items-center gap-1.5">
-                                <CheckCircle2 className="size-4" /> No defects detected
-                              </p>
+                                  <div className="space-y-1">
+                                    <span className="text-[11px] font-mono text-muted-foreground">Pair #1 Side — Dimensional Overlay</span>
+                                    <img
+                                      src={`data:image/jpeg;base64,${batchResult.annotated_frames[0].side_measure_b64}`}
+                                      alt="Pair #1 Side Measurement"
+                                      className="w-full rounded-md border border-border object-contain bg-black h-44"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Surface Defect Analysis Frames (All Captured Pairs - up to 10 Frames) */}
+                            <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
+                                🔍 Surface Defect Model Analysis (All {batchResult.annotated_frames.length} Pairs — {batchResult.annotated_frames.length * 2} Frames)
+                              </h4>
+                              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                                {batchResult.annotated_frames.flatMap((pair) => [
+                                  {
+                                    key: `p${pair.pair_index}-top-inspect`,
+                                    label: `Pair #${pair.pair_index} Top`,
+                                    b64: pair.top_inspect_b64,
+                                  },
+                                  {
+                                    key: `p${pair.pair_index}-side-inspect`,
+                                    label: `Pair #${pair.pair_index} Side`,
+                                    b64: pair.side_inspect_b64,
+                                  },
+                                ]).map((item) => (
+                                  <div key={item.key} className="space-y-1 rounded-lg border border-border bg-muted/20 p-1.5">
+                                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+                                      <span>{item.label}</span>
+                                    </div>
+                                    <img
+                                      src={`data:image/jpeg;base64,${item.b64}`}
+                                      alt={item.label}
+                                      className="w-full rounded-md border border-border object-contain bg-black h-28"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            {/* Snapshots */}
+                            <div className="space-y-2">
+                              <p className="type-caption text-muted-foreground">Top View — annotated</p>
+                              <img 
+                                src={`data:image/jpeg;base64,${detailImageMode === "measure" ? selectedRun.top_measure_b64 : selectedRun.top_inspect_b64}`}
+                                alt="Top View snapshot" 
+                                className="w-full rounded-lg border border-border object-contain bg-black" 
+                                style={{ maxHeight: 280 }}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <p className="type-caption text-muted-foreground">Side View — annotated</p>
+                              <img 
+                                src={`data:image/jpeg;base64,${detailImageMode === "measure" ? selectedRun.side_measure_b64 : selectedRun.side_inspect_b64}`}
+                                alt="Side View snapshot" 
+                                className="w-full rounded-lg border border-border object-contain bg-black" 
+                                style={{ maxHeight: 280 }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
+
+                      {/* Measurements Table & Defects List (Row 2 for all users) */}
+                      {(() => {
+                        const displayMeasurements = (batchResult && batchResult.measurements.length > 0)
+                          ? batchResult.measurements
+                          : activeMeasurements;
+                        const displayDefects = (batchResult && batchResult.defects.length > 0)
+                          ? batchResult.defects
+                          : activeDefects;
+
+                        return (
+                          <div className="grid gap-6 mt-6 lg:grid-cols-3">
+                            {/* Measurements table */}
+                            <div className="lg:col-span-2 space-y-2">
+                              <h4 className="type-body-m font-bold text-foreground">
+                                Measurement parameters ({displayMeasurements.length} parameter{displayMeasurements.length === 1 ? "" : "s"} across all captured pairs)
+                              </h4>
+                              <div className="overflow-x-auto rounded-xl border border-border">
+                                <table className="w-full">
+                                  <thead>
+                                    <tr className="border-b border-border bg-muted/40">
+                                      <Th>Parameter</Th><Th>Measured</Th><Th>Expected</Th><Th>Tolerance</Th><Th>Status</Th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border">
+                                    {displayMeasurements.map((m, idx) => (
+                                      <tr key={`${m.parameter}-${m.pair_index ?? idx}`} className={m.pass ? "" : "bg-rose-500/5"}>
+                                        <Td className="font-medium">
+                                          {m.pair_index ? <span className="mr-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground">Pair #{m.pair_index}</span> : null}
+                                          {m.parameter}
+                                        </Td>
+                                        <Td className={cn("tabular font-semibold", m.pass ? "text-emerald-400" : "text-rose-400")}>
+                                          {m.measured} {m.unit}
+                                        </Td>
+                                        <Td className="tabular text-muted-foreground">{m.expected} {m.unit}</Td>
+                                        <Td className="tabular text-muted-foreground">±{m.tolerance} {m.unit}</Td>
+                                        <Td>{m.pass ? <CheckCircle2 className="size-4 text-emerald-400" /> : <XCircle className="size-4 text-rose-400" />}</Td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* Defects list */}
+                            <div className="space-y-2">
+                              <h4 className="type-body-m font-bold text-foreground">
+                                Surface defect inspection ({displayDefects.length} defect{displayDefects.length === 1 ? "" : "s"} found)
+                              </h4>
+                              {displayDefects.length > 0 ? (
+                                <ul className="space-y-2">
+                                  {displayDefects.map((d, i) => (
+                                    <li key={i} className="flex items-center justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2">
+                                      <div>
+                                        <p className="type-body-m font-semibold text-rose-300 flex items-center gap-1.5">
+                                          {d.pair_index ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-mono text-rose-200">Pair #{d.pair_index}</span> : null}
+                                          {d.name}
+                                        </p>
+                                        <p className="type-caption text-muted-foreground">{d.cam} · Conf {(d.confidence * 100).toFixed(0)}%</p>
+                                      </div>
+                                      <AlertTriangle className="size-4 text-rose-400 shrink-0" />
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border bg-muted/20">
+                                  <p className="text-center type-body-s text-emerald-400 flex items-center gap-1.5">
+                                    <CheckCircle2 className="size-4" /> No defects detected across captured frames
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Manager-only: Latency + Model Accuracy panels */}
+                      {isManager && selectedRun.stage_timings && (
+                        <div className="grid gap-4 mt-4 md:grid-cols-2">
+                          <LatencyPanel timings={selectedRun.stage_timings} />
+                          {selectedRun.model_accuracy && testRuns.length > 1 ? (
+                            <ModelAccuracyPanel
+                              current={selectedRun.model_accuracy}
+                              sessionAvg={sessionAccuracy}
+                            />
+                          ) : selectedRun.model_accuracy ? (
+                            <ModelAccuracyPanel current={selectedRun.model_accuracy} />
+                          ) : null}
+                        </div>
+                      )}
                     </SectionCard>
                   </motion.div>
                 );
@@ -911,12 +1160,7 @@ function NewInspectionPage() {
             Back
           </Button>
 
-          {step < 1 ? (
-            <Button onClick={() => setStep((s) => s + 1)} disabled={!canNext}>
-              Continue
-              <ArrowRight className="size-4" />
-            </Button>
-          ) : (
+          {step === 0 ? null : (
             <Button onClick={handleSave} disabled={!finalStatus || running !== null}>
               {running === "save" ? (
                 <Loader2 className="size-4 animate-spin" />
