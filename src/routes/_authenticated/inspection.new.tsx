@@ -115,9 +115,6 @@ function NewInspectionPage() {
   // Toggle for images in detail view: "measure" or "inspect" (defect)
   const [detailImageMode, setDetailImageMode] = useState<"measure" | "inspect">("measure");
 
-  // Live feed stream mode (measure or inspect)
-  const [feedMode, setFeedMode] = useState<"measure" | "inspect">("measure");
-
   // Dialog state for specifications popup
   const [activeSpecPart, setActiveSpecPart] = useState<any | null>(null);
   const [isSpecDialogOpen, setIsSpecDialogOpen] = useState(false);
@@ -153,21 +150,57 @@ function NewInspectionPage() {
     setSelectedRunIdx(0);
   }, [partId]);
 
-  async function handleInspectPart() {
+  async function handleCaptureImage() {
     if (!part) return;
-    if (testRuns.length >= 5) {
-      toast.error("Maximum 5 captures reached for this inspection.");
-      return;
-    }
     setRunning("inspect");
     try {
-      const res = await runFullTest(part.part_name);
+      const measureRes = await triggerMeasure(part.part_name);
+      const newRun: RunTestResult = {
+        verdict: "reject",
+        measure_status: measureRes.status,
+        inspect_status: "reject",
+        measurements: measureRes.measurements,
+        defects: [],
+        top_measure_b64: measureRes.top_annotated_b64,
+        side_measure_b64: measureRes.side_annotated_b64,
+        top_inspect_b64: "",
+        side_inspect_b64: "",
+        duration_ms: measureRes.duration_ms,
+      };
       setTestRuns((prev) => {
-        const next = [...prev, res];
-        setSelectedRunIdx(next.length - 1); // auto-select the latest run
+        const next = [...prev, newRun];
+        setSelectedRunIdx(next.length - 1);
         return next;
       });
-      toast.success(`Check ${testRuns.length + 1} complete.`);
+      toast.success(`Captured image set ${testRuns.length + 1}.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Capture failed");
+    } finally {
+      setRunning(null);
+    }
+  }
+
+  async function handleInspectPart() {
+    if (!part || testRuns.length === 0) return;
+    setRunning("inspect");
+    try {
+      const inspectRes = await triggerInspect(part.part_name);
+      const lastRun = testRuns[testRuns.length - 1];
+      const updatedRun: RunTestResult = {
+        ...lastRun,
+        inspect_status: inspectRes.status,
+        defects: inspectRes.defects,
+        top_inspect_b64: inspectRes.top_annotated_b64,
+        side_inspect_b64: inspectRes.side_annotated_b64,
+        duration_ms: lastRun.duration_ms + inspectRes.duration_ms,
+        verdict: lastRun.measure_status === "PASS" && inspectRes.status === "pass" ? "ok" : "reject",
+      };
+      setTestRuns((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = updatedRun;
+        return next;
+      });
+      toast.success("Inspection complete.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Inspection failed");
     } finally {
@@ -500,40 +533,68 @@ function NewInspectionPage() {
                 title="Live inspection Camera"
                 subtitle="CAM 1 / Top view • CAM 2 / Side view"
                 action={
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setFeedMode("measure")}
-                      className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
-                        feedMode === "measure" ? "bg-brand-blue text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      Measure feed
-                    </button>
-                    <button
-                      onClick={() => setFeedMode("inspect")}
-                      className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition-colors",
-                        feedMode === "inspect" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      Inspect feed
-                    </button>
-                    <button
-                      id="btn-inspect-part"
-                      onClick={handleInspectPart}
-                      disabled={running !== null || backendStatus === "offline" || testRuns.length >= 5}
-                      className={cn(
-                        "rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60",
-                      )}
-                    >
-                      {running === "inspect" ? <Loader2 className="size-4 animate-spin" /> : "Capture Image"}
-                    </button>
-                  </div>
+                  (() => {
+                    const topImageCount = snapshotEntries.filter((entry) => entry.camera === "top").length;
+                    const sideImageCount = snapshotEntries.filter((entry) => entry.camera === "side").length;
+                    const isCaptureDisabled = running !== null || backendStatus === "offline" || topImageCount >= 5 || sideImageCount >= 5;
+                    const hasCapturedImages = topImageCount > 0 || sideImageCount > 0;
+                    
+                    return (
+                      <div className="flex items-center gap-2">
+                        <button
+                          id="btn-capture-image"
+                          onClick={handleCaptureImage}
+                          disabled={isCaptureDisabled}
+                          className={cn(
+                            "rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity disabled:cursor-not-allowed disabled:opacity-60",
+                            "bg-orange-500 hover:bg-orange-600"
+                          )}
+                          title={topImageCount >= 5 && sideImageCount >= 5 ? "Maximum images reached for both cameras" : topImageCount >= 5 ? "Maximum images reached for Top camera" : sideImageCount >= 5 ? "Maximum images reached for Side camera" : ""}
+                        >
+                          {running === "inspect" ? (
+                            <>
+                              <Loader2 className="inline size-4 animate-spin mr-2" />
+                              Capturing...
+                            </>
+                          ) : (
+                            <>
+                              <Camera className="inline size-4 mr-2" />
+                              Capture Image
+                            </>
+                          )}
+                        </button>
+                        
+                        <button
+                          id="btn-inspect-part"
+                          onClick={handleInspectPart}
+                          disabled={!hasCapturedImages || running !== null}
+                          className={cn(
+                            "rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity disabled:cursor-not-allowed disabled:opacity-60",
+                            hasCapturedImages ? "bg-brand-blue hover:bg-brand-blue/90" : "bg-brand-blue/50"
+                          )}
+                          title={!hasCapturedImages ? "Capture images first before inspecting" : ""}
+                        >
+                          {running === "inspect" ? (
+                            <>
+                              <Loader2 className="inline size-4 animate-spin mr-2" />
+                              Analyzing...
+                            </>
+                          ) : (
+                            <>
+                              <ScanEye className="inline size-4 mr-2" />
+                              Inspect
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })() 
                 }
               >
                 <div className="grid gap-3 md:grid-cols-2">
                   {[
-                    { label: "CAM 1 / Top view", url: feedMode === "measure" ? measureStreamUrl(part?.part_name ?? "capnut") : inspectStreamUrl(part?.part_name ?? "capnut") },
-                    { label: "CAM 2 / Side view", url: feedMode === "measure" ? measureStreamUrl(part?.part_name ?? "capnut") : inspectStreamUrl(part?.part_name ?? "capnut") },
+                    { label: "CAM 1 / Top view", url: measureStreamUrl(part?.part_name ?? "capnut") },
+                    { label: "CAM 2 / Side view", url: measureStreamUrl(part?.part_name ?? "capnut") },
                   ].map((camera) => (
                     <div
                       key={camera.label}
