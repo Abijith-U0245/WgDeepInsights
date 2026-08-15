@@ -39,7 +39,7 @@ import {
 import { useParts } from "@/hooks/useInspectionData";
 import { PART_DESCRIPTORS, getPartDescriptor, type PartDescriptor } from "@/lib/part-descriptors";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { readLocalCollection, writeLocalCollection } from "@/lib/offline-store";
 
 export const Route = createFileRoute("/_authenticated/parts")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -94,13 +94,17 @@ function PartsPage() {
     if (!newPartName.trim()) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase
-        .from("parts")
-        .insert({
-          part_name: newPartName.trim(),
-          description: newDescription.trim(),
-        });
-      if (error) throw error;
+      const row = {
+        id: `part-${Date.now()}`,
+        part_name: newPartName.trim(),
+        description: newDescription.trim(),
+        reference_image: null,
+        geometry_image: null,
+        surface_reference: null,
+        created_at: new Date().toISOString(),
+      };
+      const items = readLocalCollection<Array<Record<string, unknown>>>("parts", []);
+      writeLocalCollection("parts", [...items, row]);
       toast.success(`Part family "${newPartName}" added successfully.`);
       setNewPartName("");
       setNewDescription("");

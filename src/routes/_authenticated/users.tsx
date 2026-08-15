@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { useProfiles } from "@/hooks/useInspectionData";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { readLocalCollection, writeLocalCollection } from "@/lib/offline-store";
 
 export const Route = createFileRoute("/_authenticated/users")({
   head: () => ({
@@ -62,24 +62,10 @@ function UsersPage() {
       // Generate a valid UUID format for profiles
       const newUserId = window.crypto ? window.crypto.randomUUID() : "user-" + Date.now();
       
-      // 1. Insert profile
-      const { error: profileErr } = await supabase
-        .from("profiles")
-        .insert({
-          id: newUserId,
-          name: name.trim(),
-          email: email.trim(),
-        });
-      if (profileErr) throw profileErr;
-
-      // 2. Insert user role
-      const { error: roleErr } = await supabase
-        .from("user_roles")
-        .insert({
-          user_id: newUserId,
-          role: role as "inspector" | "inspection_manager",
-        });
-      if (roleErr) throw roleErr;
+      const profiles = readLocalCollection<Array<Record<string, unknown>>>("profiles", []);
+      const roles = readLocalCollection<Array<Record<string, unknown>>>("user_roles", []);
+      writeLocalCollection("profiles", [...profiles, { id: newUserId, name: name.trim(), email: email.trim(), created_at: new Date().toISOString() }]);
+      writeLocalCollection("user_roles", [...roles, { user_id: newUserId, role: role as "inspector" | "inspection_manager" }]);
 
       toast.success(`User "${name}" added successfully.`);
       setName("");

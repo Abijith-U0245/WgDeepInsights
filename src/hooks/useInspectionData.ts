@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { supabase } from "@/integrations/supabase/client";
+import { readLocalCollection, writeLocalCollection } from "@/lib/offline-store";
 
 export type Part = {
   id: string;
@@ -103,14 +103,26 @@ const FALLBACK_SPECS: Specification[] = [
   { id: "p5", part_id: "part-4", parameter: "Width/Chamfer (B)", expected_value: 3.20, tolerance: 0, unit: "mm", notes: "" },
 ];
 
+function ensureSeededCollection<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+
+  const data = readLocalCollection<T>(key, fallback);
+  const hasData = Array.isArray(data) ? data.length > 0 : data !== null && data !== undefined;
+
+  if (!hasData) {
+    writeLocalCollection(key, fallback);
+    return fallback;
+  }
+
+  return data;
+}
+
 export function useParts() {
   return useQuery({
     queryKey: ["parts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("parts").select("*").order("part_name");
-      if (error) throw error;
-      if (!data || data.length === 0) return FALLBACK_PARTS;
-      return data as Part[];
+      const data = ensureSeededCollection<Part[]>("parts", FALLBACK_PARTS);
+      return data.length > 0 ? data : FALLBACK_PARTS;
     },
   });
 }
@@ -119,18 +131,14 @@ export function useSpecifications(partId?: string, partName?: string) {
   return useQuery({
     queryKey: ["specifications", partId ?? "all", partName ?? "none"],
     queryFn: async () => {
-      let q = supabase.from("specifications").select("*").order("parameter");
-      if (partId) q = q.eq("part_id", partId);
-      const { data, error } = await q;
-      if (error) throw error;
-      
-      if (!data || data.length === 0) {
-        if (!partName) return FALLBACK_SPECS;
-        const normalizedName = partName.toLowerCase();
-        const fallbackPart = FALLBACK_PARTS.find(p => p.part_name.toLowerCase() === normalizedName);
-        return fallbackPart ? FALLBACK_SPECS.filter(s => s.part_id === fallbackPart.id) : FALLBACK_SPECS;
-      }
-      return data as Specification[];
+      const data = ensureSeededCollection<Specification[]>("specifications", FALLBACK_SPECS);
+      const filtered = partId ? data.filter((item) => item.part_id === partId) : data;
+
+      if (filtered.length > 0) return filtered;
+      if (!partName) return FALLBACK_SPECS;
+      const normalizedName = partName.toLowerCase();
+      const fallbackPart = FALLBACK_PARTS.find((p) => p.part_name.toLowerCase() === normalizedName);
+      return fallbackPart ? FALLBACK_SPECS.filter((s) => s.part_id === fallbackPart.id) : FALLBACK_SPECS;
     },
   });
 }
@@ -139,18 +147,14 @@ export function useModels(partId?: string, partName?: string) {
   return useQuery({
     queryKey: ["models", partId ?? "all", partName ?? "none"],
     queryFn: async () => {
-      let q = supabase.from("models").select("*").order("model_name");
-      if (partId) q = q.eq("part_id", partId);
-      const { data, error } = await q;
-      if (error) throw error;
-      
-      if (!data || data.length === 0) {
-        if (!partName) return FALLBACK_MODELS;
-        const normalizedName = partName.toLowerCase();
-        const fallbackPart = FALLBACK_PARTS.find(p => p.part_name.toLowerCase() === normalizedName);
-        return fallbackPart ? FALLBACK_MODELS.filter(m => m.part_id === fallbackPart.id) : FALLBACK_MODELS;
-      }
-      return data as Model[];
+      const data = ensureSeededCollection<Model[]>("models", FALLBACK_MODELS);
+      const filtered = partId ? data.filter((item) => item.part_id === partId) : data;
+
+      if (filtered.length > 0) return filtered;
+      if (!partName) return FALLBACK_MODELS;
+      const normalizedName = partName.toLowerCase();
+      const fallbackPart = FALLBACK_PARTS.find((p) => p.part_name.toLowerCase() === normalizedName);
+      return fallbackPart ? FALLBACK_MODELS.filter((m) => m.part_id === fallbackPart.id) : FALLBACK_MODELS;
     },
   });
 }
@@ -169,13 +173,8 @@ export function useInspections() {
   return useQuery({
     queryKey: ["inspections"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inspections")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return data as Inspection[];
+      const data = readLocalCollection<Inspection[]>("inspections", []);
+      return [...data].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 500);
     },
   });
 }
@@ -184,12 +183,8 @@ export function useAllDefectResults() {
   return useQuery({
     queryKey: ["defect_results_all"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("defect_results")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as DefectResult[];
+      const data = readLocalCollection<DefectResult[]>("defect_results", []);
+      return [...data].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
     },
   });
 }
@@ -203,21 +198,12 @@ export function useProfiles() {
   return useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
-      const [{ data: profiles, error }, { data: roles }] = await Promise.all([
-        supabase.from("profiles").select("*").order("created_at"),
-        supabase.from("user_roles").select("user_id, role"),
-      ]);
-      if (error) throw error;
-      
-      const parsedProfiles = profiles ?? [];
-      const parsedRoles = roles ?? [];
-      
-      if (parsedProfiles.length === 0) {
-        return FALLBACK_PROFILES;
-      }
-      
-      const roleMap = new Map(parsedRoles.map((r) => [r.user_id, r.role as string]));
-      return parsedProfiles.map((p) => ({
+      const profiles = readLocalCollection<Array<{ id: string; name: string; email: string; created_at: string }>>("profiles", FALLBACK_PROFILES);
+      const roles = readLocalCollection<Array<{ user_id: string; role: string }>>("user_roles", []);
+      const roleMap = new Map(roles.map((r) => [r.user_id, r.role]));
+
+      if (profiles.length === 0) return FALLBACK_PROFILES;
+      return profiles.map((p) => ({
         id: p.id,
         name: p.name || p.email.split("@")[0] || "Unnamed",
         email: p.email,
@@ -232,37 +218,17 @@ export function useInspectionDetail(id: string) {
   return useQuery({
     queryKey: ["inspection", id],
     queryFn: async () => {
-      const [{ data: inspection, error }, measurements, defects, images] = await Promise.all([
-        supabase.from("inspections").select("*").eq("id", id).maybeSingle(),
-        supabase.from("measurement_results").select("*").eq("inspection_id", id),
-        supabase.from("defect_results").select("*").eq("inspection_id", id),
-        supabase.from("captured_images").select("*").eq("inspection_id", id),
-      ]);
-      if (error) throw error;
+      const inspections = readLocalCollection<Inspection[]>("inspections", []);
+      const inspection = inspections.find((item) => item.id === id) ?? null;
+      const measurements = readLocalCollection<Array<{ id: string; inspection_id: string; parameter: string; expected: number; actual: number; deviation: number; tolerance: number; unit: string; status: string }>>("measurement_results", []).filter((item) => item.inspection_id === id);
+      const defects = readLocalCollection<Array<{ id: string; inspection_id: string; defect_name: string; confidence: number; annotated_image: string | null; status: string }>>("defect_results", []).filter((item) => item.inspection_id === id);
+      const images = readLocalCollection<Array<{ id: string; inspection_id: string; image_type: string; image_url: string }>>("captured_images", []).filter((item) => item.inspection_id === id);
+
       return {
-        inspection: inspection as Inspection | null,
-        measurements: (measurements.data ?? []) as Array<{
-          id: string;
-          parameter: string;
-          expected: number;
-          actual: number;
-          deviation: number;
-          tolerance: number;
-          unit: string;
-          status: string;
-        }>,
-        defects: (defects.data ?? []) as Array<{
-          id: string;
-          defect_name: string;
-          confidence: number;
-          annotated_image: string | null;
-          status: string;
-        }>,
-        images: (images.data ?? []) as Array<{
-          id: string;
-          image_type: string;
-          image_url: string;
-        }>,
+        inspection,
+        measurements,
+        defects,
+        images,
       };
     },
   });

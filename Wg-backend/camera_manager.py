@@ -11,6 +11,7 @@ import ctypes
 import threading
 import time
 import os
+from typing import Optional
 import numpy as np
 import cv2
 
@@ -68,7 +69,7 @@ BUF_SIZE = 4000 * 3000 * 3  # worst-case 4K RGB buffer
 class CameraManager:
     """Thread-safe singleton that owns both GigE cameras with background caching for live streams."""
 
-    _instance: "CameraManager | None" = None
+    _instance: Optional["CameraManager"] = None
     _lock = threading.Lock()
 
     def __init__(self):
@@ -81,8 +82,8 @@ class CameraManager:
 
         # Non-blocking live stream cache
         self._cache_lock = threading.Lock()
-        self._latest_top: "np.ndarray | None" = None
-        self._latest_side: "np.ndarray | None" = None
+        self._latest_top: Optional[np.ndarray] = None
+        self._latest_side: Optional[np.ndarray] = None
         self._running = True
 
         if not DEMO_MODE:
@@ -186,7 +187,7 @@ class CameraManager:
             print("[WARN] Could not open physical cameras — DEMO MODE active")
             DEMO_MODE = True
 
-    def _grab_one(self, which: str) -> np.ndarray | None:
+    def _grab_one(self, which: str) -> Optional[np.ndarray]:
         cam = self._cameras.get(which)
         if cam is None:
             return None

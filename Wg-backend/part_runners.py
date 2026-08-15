@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import base64
+from typing import Optional
 import cv2
 import numpy as np
 from ultralytics import YOLO
@@ -333,7 +334,7 @@ def run_measurement(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     model = _get_model(key)
 
     # Run YOLO to get object bounding box (for masking)
-    def _get_ai_box(frame: np.ndarray) -> np.ndarray | None:
+    def _get_ai_box(frame: np.ndarray) -> Optional[np.ndarray]:
         results = list(model(frame, stream=True, verbose=False, conf=0.25))
         for r in results:
             for box, cls in zip(r.boxes.xyxy, r.boxes.cls):

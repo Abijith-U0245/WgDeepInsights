@@ -51,8 +51,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useModels, useParts, useSpecifications } from "@/hooks/useInspectionData";
-import { supabase } from "@/integrations/supabase/client";
 import { uploadFile } from "@/lib/storage";
+import { readLocalCollection, writeLocalCollection } from "@/lib/offline-store";
 import { cn } from "@/lib/utils";
 import {
   checkBackendHealth,
@@ -74,11 +74,13 @@ import {
 
 type SearchParams = {
   part?: string | undefined;
+  partKey?: string | undefined;
 };
 
 export const Route = createFileRoute("/_authenticated/inspection/new")({
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
     part: typeof search["part"] === "string" ? (search["part"] as string) : undefined,
+    partKey: typeof search["partKey"] === "string" ? (search["partKey"] as string) : undefined,
   }),
   head: () => ({
     meta: [
@@ -104,8 +106,9 @@ const STEPS = [
 ];
 
 function NewInspectionPage() {
-  const { part: searchPart } = Route.useSearch();
+  const { part: searchPart, partKey: searchPartKey } = Route.useSearch();
   const navigate = useNavigate();
+  const resolvedSearchPart = searchPart ?? searchPartKey;
   const queryClient = useQueryClient();
   const { user, isManager } = useAuth();
 
@@ -155,19 +158,25 @@ function NewInspectionPage() {
 
   // Auto-select part from URL query param (e.g. from Dashboard Inspect button) and jump straight to step 1
   useEffect(() => {
-    if (!searchPart || parts.length === 0) return;
+    if (!resolvedSearchPart || parts.length === 0) return;
     const match = parts.find(
       (p) =>
-        p.id === searchPart ||
-        p.part_name.toLowerCase().replace(/[^a-z0-9]/g, "") === searchPart.toLowerCase().replace(/[^a-z0-9]/g, "") ||
-        p.part_name.toLowerCase().includes(searchPart.toLowerCase()) ||
-        searchPart.toLowerCase().includes(p.part_name.toLowerCase())
+        p.id === resolvedSearchPart ||
+        p.part_name.toLowerCase().replace(/[^a-z0-9]/g, "") === resolvedSearchPart.toLowerCase().replace(/[^a-z0-9]/g, "") ||
+        p.part_name.toLowerCase().includes(resolvedSearchPart.toLowerCase()) ||
+        resolvedSearchPart.toLowerCase().includes(p.part_name.toLowerCase())
     );
     if (match) {
       setPartId(match.id);
       setStep(1); // Jump directly to camera inspection feed!
     }
-  }, [searchPart, parts]);
+  }, [resolvedSearchPart, parts]);
+
+  useEffect(() => {
+    if (!partId && parts.length > 0) {
+      setPartId(parts[0].id);
+    }
+  }, [partId, parts]);
 
   // Auto-select model ID in background
   useEffect(() => {
@@ -452,25 +461,26 @@ function NewInspectionPage() {
 
       const totalDurationMs = testRuns.reduce((acc, r) => acc + r.duration_ms, 0);
 
-      const { data: inspection, error } = await supabase
-        .from("inspections")
-        .insert({
-          inspector_id: user.id,
-          part_id: dbPartId,
-          model_id: dbModelId,
-          inspection_date: now.toISOString().slice(0, 10),
-          inspection_time: now.toTimeString().slice(0, 8),
-          shift,
-          area,
-          duration_seconds: Math.round(totalDurationMs / 1000),
-          status: finalStatus,
-          remarks,
-        })
-        .select("id, inspection_number")
-        .single();
-      if (error) throw error;
-
-      const inspectionId = inspection.id as string;
+      const inspectionId = `inspection-${Date.now()}`;
+      const inspectionNumber = `WG-${String(Date.now()).slice(-6)}`;
+      const inspectionRecord = {
+        id: inspectionId,
+        inspection_number: inspectionNumber,
+        inspector_id: user.id,
+        part_id: dbPartId,
+        model_id: dbModelId,
+        inspection_date: now.toISOString().slice(0, 10),
+        inspection_time: now.toTimeString().slice(0, 8),
+        shift,
+        area,
+        duration_seconds: Math.round(totalDurationMs / 1000),
+        status: finalStatus,
+        remarks,
+        report_url: null,
+        created_at: now.toISOString(),
+      };
+      const inspections = readLocalCollection<Array<Record<string, unknown>>>("inspections", []);
+      writeLocalCollection("inspections", [...inspections, inspectionRecord]);
 
       const finalMeasurements = (batchResult && batchResult.measurements.length > 0)
         ? batchResult.measurements
@@ -481,20 +491,18 @@ function NewInspectionPage() {
         : allDefects;
 
       if (finalMeasurements.length) {
-        await supabase.from("measurement_results").insert(
-          finalMeasurements.map((m) => ({
-            inspection_id: inspectionId,
-            ...toSupabaseMeasurement(m),
-          })),
-        );
+        const current = readLocalCollection<Array<Record<string, unknown>>>("measurement_results", []);
+        writeLocalCollection("measurement_results", [
+          ...current,
+          ...finalMeasurements.map((m) => ({ inspection_id: inspectionId, ...toSupabaseMeasurement(m) })),
+        ]);
       }
       if (finalDefects.length) {
-        await supabase.from("defect_results").insert(
-          finalDefects.map((d) => ({
-            inspection_id: inspectionId,
-            ...toSupabaseDefect(d),
-          })),
-        );
+        const current = readLocalCollection<Array<Record<string, unknown>>>("defect_results", []);
+        writeLocalCollection("defect_results", [
+          ...current,
+          ...finalDefects.map((d) => ({ inspection_id: inspectionId, ...toSupabaseDefect(d) })),
+        ]);
       }
 
       // Upload captured top and side views from all runs
@@ -543,18 +551,18 @@ function NewInspectionPage() {
           }
           const file = new File([bytes], `${img.type}.jpg`, { type: "image/jpeg" });
           const ref = await uploadFile("captured-images", file, inspectionId);
-          await supabase.from("captured_images").insert({
-            inspection_id: inspectionId,
-            image_type: img.type,
-            image_url: ref,
-          });
+          const current = readLocalCollection<Array<Record<string, unknown>>>("captured_images", []);
+          writeLocalCollection("captured_images", [
+            ...current,
+            { inspection_id: inspectionId, image_type: img.type, image_url: ref },
+          ]);
         } catch (uploadErr) {
           console.error("Failed to upload image to storage:", img.type, uploadErr);
         }
       }
 
       await queryClient.invalidateQueries({ queryKey: ["inspections"] });
-      toast.success(`Saved ${inspection.inspection_number as string}`);
+      toast.success(`Saved ${inspectionNumber}`);
       void navigate({ to: "/report/$id", params: { id: inspectionId } });
     } catch (e: any) {
       console.error("Save error details:", e);

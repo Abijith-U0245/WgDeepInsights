@@ -21,7 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useModels, useParts } from "@/hooks/useInspectionData";
-import { supabase } from "@/integrations/supabase/client";
+import { readLocalCollection, writeLocalCollection } from "@/lib/offline-store";
 
 export const Route = createFileRoute("/_authenticated/models")({
   head: () => ({
@@ -55,17 +55,18 @@ function ModelsPage() {
     setSubmitting(true);
     try {
       const selectedPartId = partId === "all" ? null : partId;
-      const { error } = await supabase
-        .from("models")
-        .insert({
-          model_name: modelName.trim(),
-          model_type: modelType,
-          model_path: modelPath.trim() || `models/${modelName.trim().toLowerCase().replace(/\s+/g, '_')}_best.pt`,
-          version: version.trim() || "1.0",
-          part_id: selectedPartId,
-          status: "active"
-        });
-      if (error) throw error;
+      const row = {
+        id: `model-${Date.now()}`,
+        model_name: modelName.trim(),
+        model_type: modelType,
+        model_path: modelPath.trim() || `models/${modelName.trim().toLowerCase().replace(/\s+/g, '_')}_best.pt`,
+        version: version.trim() || "1.0",
+        part_id: selectedPartId,
+        status: "active",
+        uploaded_at: new Date().toISOString(),
+      };
+      const items = readLocalCollection<Array<Record<string, unknown>>>("models", []);
+      writeLocalCollection("models", [...items, row]);
       toast.success(`Model "${modelName}" registered successfully.`);
       setModelName("");
       setModelPath("");

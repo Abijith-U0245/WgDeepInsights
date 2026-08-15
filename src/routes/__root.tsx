@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/hooks/useAuth";
 import { Toaster } from "@/components/ui/sonner";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 
 function NotFoundComponent() {
   return (
@@ -120,6 +121,21 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const { online } = useNetworkStatus();
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      void import("virtual:pwa-register").then(({ registerSW }) => {
+        registerSW({ immediate: true });
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!online) {
+      console.info("WGDeepInsight running in offline mode with local-first execution.");
+    }
+  }, [online]);
 
   return (
     <QueryClientProvider client={queryClient}>
