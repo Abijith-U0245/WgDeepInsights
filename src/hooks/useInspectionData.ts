@@ -107,11 +107,17 @@ export function useParts() {
   return useQuery({
     queryKey: ["parts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("parts").select("*").order("part_name");
-      if (error) throw error;
-      if (!data || data.length === 0) return FALLBACK_PARTS;
-      return data as Part[];
+      try {
+        const fetchPromise = supabase.from("parts").select("*").order("part_name");
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ data: null, error: true }), 1500));
+        const res: any = await Promise.race([fetchPromise, timeoutPromise]);
+        if (res.error || !res.data || res.data.length === 0) return FALLBACK_PARTS;
+        return res.data as Part[];
+      } catch {
+        return FALLBACK_PARTS;
+      }
     },
+    initialData: FALLBACK_PARTS,
   });
 }
 
@@ -119,18 +125,24 @@ export function useSpecifications(partId?: string, partName?: string) {
   return useQuery({
     queryKey: ["specifications", partId ?? "all", partName ?? "none"],
     queryFn: async () => {
-      let q = supabase.from("specifications").select("*").order("parameter");
-      if (partId) q = q.eq("part_id", partId);
-      const { data, error } = await q;
-      if (error) throw error;
-      
-      if (!data || data.length === 0) {
+      try {
+        let q = supabase.from("specifications").select("*").order("parameter");
+        if (partId) q = q.eq("part_id", partId);
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ data: null, error: true }), 1500));
+        const res: any = await Promise.race([q, timeoutPromise]);
+        if (res.error || !res.data || res.data.length === 0) {
+          if (!partName) return FALLBACK_SPECS;
+          const normalizedName = partName.toLowerCase();
+          const fallbackPart = FALLBACK_PARTS.find(p => p.part_name.toLowerCase() === normalizedName);
+          return fallbackPart ? FALLBACK_SPECS.filter(s => s.part_id === fallbackPart.id) : FALLBACK_SPECS;
+        }
+        return res.data as Specification[];
+      } catch {
         if (!partName) return FALLBACK_SPECS;
         const normalizedName = partName.toLowerCase();
         const fallbackPart = FALLBACK_PARTS.find(p => p.part_name.toLowerCase() === normalizedName);
         return fallbackPart ? FALLBACK_SPECS.filter(s => s.part_id === fallbackPart.id) : FALLBACK_SPECS;
       }
-      return data as Specification[];
     },
   });
 }
@@ -139,18 +151,24 @@ export function useModels(partId?: string, partName?: string) {
   return useQuery({
     queryKey: ["models", partId ?? "all", partName ?? "none"],
     queryFn: async () => {
-      let q = supabase.from("models").select("*").order("model_name");
-      if (partId) q = q.eq("part_id", partId);
-      const { data, error } = await q;
-      if (error) throw error;
-      
-      if (!data || data.length === 0) {
+      try {
+        let q = supabase.from("models").select("*").order("model_name");
+        if (partId) q = q.eq("part_id", partId);
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ data: null, error: true }), 1500));
+        const res: any = await Promise.race([q, timeoutPromise]);
+        if (res.error || !res.data || res.data.length === 0) {
+          if (!partName) return FALLBACK_MODELS;
+          const normalizedName = partName.toLowerCase();
+          const fallbackPart = FALLBACK_PARTS.find(p => p.part_name.toLowerCase() === normalizedName);
+          return fallbackPart ? FALLBACK_MODELS.filter(m => m.part_id === fallbackPart.id) : FALLBACK_MODELS;
+        }
+        return res.data as Model[];
+      } catch {
         if (!partName) return FALLBACK_MODELS;
         const normalizedName = partName.toLowerCase();
         const fallbackPart = FALLBACK_PARTS.find(p => p.part_name.toLowerCase() === normalizedName);
         return fallbackPart ? FALLBACK_MODELS.filter(m => m.part_id === fallbackPart.id) : FALLBACK_MODELS;
       }
-      return data as Model[];
     },
   });
 }

@@ -233,15 +233,14 @@ def _adapter_side(img, pmm_x, pmm_y):
     fused = cv2.morphologyEx(thresh,cv2.MORPH_CLOSE,kernel,iterations=2)
     cnts,_ = cv2.findContours(fused,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     valid = [c for c in cnts if cv2.contourArea(c)>5000]
-    if not valid: return 0.0,0.0,0,"ERROR",None
+    if not valid: return 0.0,0.0,0,"ERROR",False,False,None
     main = max(valid,key=cv2.contourArea)
     x,y,w_px,h_px = cv2.boundingRect(main)
     h_mm = h_px/pmm_y; w_mm = w_px/pmm_x
-    status = "PASS"
-    if not (_ADAPTER["SIDE_H_MIN"]<=h_mm<=_ADAPTER["SIDE_H_MAX"] and
-            _ADAPTER["SIDE_W_MIN"]<=w_mm<=_ADAPTER["SIDE_W_MAX"]):
-        status = "FAIL"
-    return h_mm, w_mm, 0, status, (x,y,w_px,h_px)
+    h_pass = _ADAPTER["SIDE_H_MIN"] <= h_mm <= _ADAPTER["SIDE_H_MAX"]
+    w_pass = _ADAPTER["SIDE_W_MIN"] <= w_mm <= _ADAPTER["SIDE_W_MAX"]
+    status = "PASS" if (h_pass and w_pass) else "FAIL"
+    return h_mm, w_mm, 0, status, h_pass, w_pass, (x,y,w_px,h_px)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -381,11 +380,11 @@ def run_measurement(part: str, top: np.ndarray, side: np.ndarray) -> dict:
 
     elif key in ("adapter", "adaptor"):
         id_bore, status_top, circ = _adapter_top(top, _ADAPTER["PMM_TOP"])
-        ht, wd, _, status_side, box_data = _adapter_side(side, _ADAPTER["PMM_SIDE_X"], _ADAPTER["PMM_SIDE_Y"])
+        ht, wd, _, status_side, h_pass, w_pass, box_data = _adapter_side(side, _ADAPTER["PMM_SIDE_X"], _ADAPTER["PMM_SIDE_Y"])
         rows = [
             {"parameter":"ID Bore (10mm)",    "measured":round(id_bore,3),"expected":10.0,"tolerance":0.30,"unit":"mm","pass":status_top=="PASS"},
-            {"parameter":"Side Height (44mm)","measured":round(ht,3),     "expected":44.0,"tolerance":0.30,"unit":"mm","pass":status_side=="PASS"},
-            {"parameter":"Side Width (27mm)", "measured":round(wd,3),     "expected":27.0,"tolerance":0.30,"unit":"mm","pass":status_side=="PASS"},
+            {"parameter":"Side Height (44mm)","measured":round(ht,3),     "expected":44.0,"tolerance":0.30,"unit":"mm","pass":h_pass},
+            {"parameter":"Side Width (27mm)", "measured":round(wd,3),     "expected":27.0,"tolerance":0.30,"unit":"mm","pass":w_pass},
         ]
         if circ: cv2.circle(top_ann,(circ[0],circ[1]),circ[2],(255,0,255),3)
         if box_data:
@@ -450,7 +449,12 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     key = part.lower().replace("-","").replace(" ","")
     model = _get_model(key)
 
-    OK_CLASSES = {"OK_Part", "okay_part", "okay_pin", "Adaptor", "Stud", "Capnut", "Pin"}
+    def _is_ok_class(cls_name: str) -> bool:
+        c = cls_name.lower().replace("_", "").replace("-", "").replace(" ", "")
+        ok_prefixes = ("ok", "okay", "pass", "good", "nodefect")
+        ok_exact = {"stud", "adaptor", "adapter", "capnut", "pin"}
+        return any(c.startswith(p) for p in ok_prefixes) or (c in ok_exact)
+
     defects: list[dict] = []
 
     # Per-camera confidence tracking
@@ -474,7 +478,7 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
                 if c > cam_max_conf:
                     cam_max_conf = c
                 cls_name = r.names[int(cls)]
-                if cls_name not in OK_CLASSES:
+                if not _is_ok_class(cls_name):
                     x1,y1,x2,y2 = map(int, box.cpu().numpy())
                     defects.append({
                         "name": cls_name,
@@ -498,12 +502,20 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     status = "pass" if len(defects) == 0 else "reject"
     avg_conf = round((top_max_conf + side_max_conf) / 2, 3)
 
-    col   = (0,255,0) if status == "pass" else (0,0,255)
-    label = "NO DEFECTS" if status == "pass" else f"{len(defects)} DEFECT(S)"
+    # Camera-specific defect counts and overlay labels
+    top_defects = [d for d in defects if d["cam"] == "TOP VIEW"]
+    side_defects = [d for d in defects if d["cam"] == "SIDE VIEW"]
+
+    top_col = (0, 255, 0) if len(top_defects) == 0 else (0, 0, 255)
+    side_col = (0, 255, 0) if len(side_defects) == 0 else (0, 0, 255)
+
+    top_label = "NO DEFECTS" if len(top_defects) == 0 else f"{len(top_defects)} DEFECT(S)"
+    side_label = "NO DEFECTS" if len(side_defects) == 0 else f"{len(side_defects)} DEFECT(S)"
+
     top_disp  = cv2.resize(top_ann,  (640,480))
     side_disp = cv2.resize(side_ann, (640,480))
-    cv2.putText(top_disp,  f"INSPECT: {label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, col, 2)
-    cv2.putText(side_disp, f"INSPECT: {label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, col, 2)
+    cv2.putText(top_disp,  f"INSPECT: {top_label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, top_col, 2)
+    cv2.putText(side_disp, f"INSPECT: {side_label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, side_col, 2)
 
     return {
         "status":         status,
