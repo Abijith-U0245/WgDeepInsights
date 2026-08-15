@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/design")({
   component: DesignPage,
 });
 
-export default function DesignPage() {
+function DesignPage() {
   return (
     <AppShell
       title="Solution Design"

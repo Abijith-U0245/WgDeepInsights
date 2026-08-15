@@ -103,7 +103,7 @@ async def _mjpeg_generator(part: str, cam: str = "all"):
             + buf.tobytes()
             + b"\r\n"
         )
-        await asyncio.sleep(1 / 5)  # ~5 fps
+        await asyncio.sleep(1 / 20)  # ~20 fps smooth live stream
 
 
 @app.get("/stream/{part}/measure")

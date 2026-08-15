@@ -493,24 +493,13 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     top_ann  = _process(top,  "TOP VIEW")
     side_ann = _process(side, "SIDE VIEW")
 
-    # ── Untrained parameter / unrecognised part guard ─────────────────────
+    # Surface check passes if 0 defect boxes are detected
     part_detected = top_has_boxes or side_has_boxes
-    if not part_detected:
-        # No boxes found on either camera → cannot evaluate; force reject
-        defects.append({
-            "name": "part_not_recognized",
-            "confidence": 0.0,
-            "bbox": [0, 0, 0, 0],
-            "cam": "TOP VIEW",
-        })
-
-    status = "pass" if (len(defects) == 0 and part_detected) else "reject"
+    status = "pass" if len(defects) == 0 else "reject"
     avg_conf = round((top_max_conf + side_max_conf) / 2, 3)
 
     col   = (0,255,0) if status == "pass" else (0,0,255)
-    label = "NO DEFECTS" if status == "pass" else (
-        "NOT RECOGNIZED" if not part_detected else f"{len(defects)} DEFECT(S)"
-    )
+    label = "NO DEFECTS" if status == "pass" else f"{len(defects)} DEFECT(S)"
     top_disp  = cv2.resize(top_ann,  (640,480))
     side_disp = cv2.resize(side_ann, (640,480))
     cv2.putText(top_disp,  f"INSPECT: {label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, col, 2)

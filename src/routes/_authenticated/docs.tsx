@@ -40,7 +40,7 @@ const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: "troubleshooting",label: "Troubleshooting",    icon: LifeBuoy     },
 ];
 
-export default function DocsPage() {
+function DocsPage() {
   const [tab, setTab] = useState<Tab>("manual");
 
   return (

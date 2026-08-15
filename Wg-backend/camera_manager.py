@@ -75,8 +75,10 @@ class CameraManager:
         global DEMO_MODE
         self._cam_lock = threading.Lock()
         self._cameras: dict[str, MvCamera] = {}        # "top" | "side" → MvCamera
-        self._data_buf = (ctypes.c_ubyte * BUF_SIZE)()
-        self._frame_info = MV_FRAME_OUT_INFO_EX() if _MVS_AVAILABLE else None
+        self._top_buf = (ctypes.c_ubyte * BUF_SIZE)()
+        self._side_buf = (ctypes.c_ubyte * BUF_SIZE)()
+        self._top_info = MV_FRAME_OUT_INFO_EX() if _MVS_AVAILABLE else None
+        self._side_info = MV_FRAME_OUT_INFO_EX() if _MVS_AVAILABLE else None
         self._demo_counter = 0
 
         # Non-blocking live stream cache
@@ -156,7 +158,7 @@ class CameraManager:
 
             cam.MV_CC_SetIntValue("GevSCPD", 1000)
             cam.MV_CC_SetBoolValue("AcquisitionFrameRateEnable", True)
-            cam.MV_CC_SetFloatValue("AcquisitionFrameRate", 15.0)
+            cam.MV_CC_SetFloatValue("AcquisitionFrameRate", 20.0)
             cam.MV_CC_SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF)
 
             if serial == TOP_CAM_SERIAL:
@@ -190,16 +192,22 @@ class CameraManager:
         cam = self._cameras.get(which)
         if cam is None:
             return None
+        buf = self._top_buf if which == "top" else self._side_buf
+        info = self._top_info if which == "top" else self._side_info
+        if info is None:
+            return None
         with self._cam_lock:
             ret = cam.MV_CC_GetOneFrameTimeout(
-                ctypes.byref(self._data_buf), BUF_SIZE, self._frame_info, 2000
+                ctypes.byref(buf), BUF_SIZE, info, 300
             )
             if ret != 0:
                 return None
-            h = self._frame_info.nHeight
-            w = self._frame_info.nWidth
-            frame_len = self._frame_info.nFrameLen
-            raw = np.frombuffer(self._data_buf, count=frame_len, dtype=np.uint8)
+            h = info.nHeight
+            w = info.nWidth
+            frame_len = info.nFrameLen
+            if frame_len == 0 or h == 0 or w == 0:
+                return None
+            raw = np.frombuffer(buf, count=frame_len, dtype=np.uint8)
             if frame_len == h * w:
                 return cv2.cvtColor(raw.reshape((h, w)), cv2.COLOR_BayerBG2BGR)
             return raw.reshape((h, w, 3))
