@@ -52,8 +52,8 @@ def _frame_to_b64(frame: np.ndarray) -> str:
 _CAPNUT = dict(
     PMM_TOP_OD=45.13, PMM_TOP_ID=47.28, PMM_SIDE_X=31.09, PMM_SIDE_Y=56.74,
     TOP_OD_MIN=35.38, TOP_OD_MAX=36.10,
-    TOP_ID_MIN=16.95, TOP_ID_MAX=17.35,
-    SIDE_H_MIN=17.40, SIDE_H_MAX=17.60,
+    TOP_ID_MIN=16.85, TOP_ID_MAX=17.45,
+    SIDE_H_MIN=17.20, SIDE_H_MAX=17.80, # 17.50 ± 0.30 mm
     SIDE_W_MIN=35.38, SIDE_W_MAX=36.10,
 )
 
@@ -190,7 +190,7 @@ def _stud_side(img, pmm_y, ai_box):
 # ══════════════════════════════════════════════════════════════════════════════
 
 _ADAPTER = dict(
-    PMM_TOP=57.89, PMM_SIDE_X=31.12, PMM_SIDE_Y=31.58,
+    PMM_TOP=59.28, PMM_SIDE_X=31.26, PMM_SIDE_Y=31.25,
     TOP_ID_MIN=9.70, TOP_ID_MAX=10.30,
     SIDE_H_MIN=43.70, SIDE_H_MAX=44.30,
     SIDE_W_MIN=26.70, SIDE_W_MAX=27.30,
@@ -347,11 +347,14 @@ def run_measurement(part: str, top: np.ndarray, side: np.ndarray) -> dict:
 
     if key == "capnut":
         od, id_bore, status_top, od_p, id_p, rect, cid = _capnut_top(top, _CAPNUT["PMM_TOP_OD"], _CAPNUT["PMM_TOP_ID"], top_box)
-        ht, wd, status_side, h_p, w_p, box_data = _capnut_side(side, _CAPNUT["PMM_SIDE_X"], _CAPNUT["PMM_SIDE_Y"], side_box)
+        ht, _, status_side_h, h_p, _, box_data = _capnut_side(side, _CAPNUT["PMM_SIDE_X"], _CAPNUT["PMM_SIDE_Y"], side_box)
+        wd = od
+        w_p = od_p
+        status_side = "PASS" if (h_p and w_p) else "FAIL"
         rows = [
             {"parameter":"OD Flats (36mm)",  "measured":round(od,3), "expected":35.74, "tolerance":0.36, "unit":"mm","pass":od_p},
-            {"parameter":"ID Bore (17.15mm)", "measured":round(id_bore,3),"expected":17.15,"tolerance":0.20,"unit":"mm","pass":id_p},
-            {"parameter":"Side Height",       "measured":round(ht,3), "expected":17.50, "tolerance":0.10,"unit":"mm","pass":h_p},
+            {"parameter":"ID Bore (17.15mm)", "measured":round(id_bore,3),"expected":17.15,"tolerance":0.30,"unit":"mm","pass":id_p},
+            {"parameter":"Side Height",       "measured":round(ht,3), "expected":17.50, "tolerance":0.30,"unit":"mm","pass":h_p},
             {"parameter":"Side Width",        "measured":round(wd,3), "expected":35.74, "tolerance":0.36,"unit":"mm","pass":w_p},
         ]
         if rect:

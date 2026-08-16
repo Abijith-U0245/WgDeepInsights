@@ -84,10 +84,10 @@ def _annotate_live_measure(part: str, top: np.ndarray, side: np.ndarray) -> tupl
     return top_d, side_d
 
 
-async def _mjpeg_generator(part: str, cam: str = "all"):
+async def _mjpeg_generator(part: str, cam: str = "all", mode: str = "measurement"):
     """Yields multipart MJPEG frames. cam can be 'top', 'side', or 'all'."""
     mgr = CameraManager.instance()
-    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, part)
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, part, mode)
     while True:
         top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
         top_d, side_d = _annotate_live_measure(part, top, side)
@@ -110,7 +110,7 @@ async def _mjpeg_generator(part: str, cam: str = "all"):
 async def stream_measure(part: str, cam: str = "all"):
     key = _normalise(part)
     return StreamingResponse(
-        _mjpeg_generator(key, cam=cam),
+        _mjpeg_generator(key, cam=cam, mode="measurement"),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -119,7 +119,7 @@ async def stream_measure(part: str, cam: str = "all"):
 async def stream_inspect(part: str, cam: str = "all"):
     key = _normalise(part)
     return StreamingResponse(
-        _mjpeg_generator(key, cam=cam),
+        _mjpeg_generator(key, cam=cam, mode="inspect"),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -128,7 +128,7 @@ async def stream_inspect(part: str, cam: str = "all"):
 async def stream_top(part: str):
     key = _normalise(part)
     return StreamingResponse(
-        _mjpeg_generator(key, cam="top"),
+        _mjpeg_generator(key, cam="top", mode="measurement"),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -137,7 +137,7 @@ async def stream_top(part: str):
 async def stream_side(part: str):
     key = _normalise(part)
     return StreamingResponse(
-        _mjpeg_generator(key, cam="side"),
+        _mjpeg_generator(key, cam="side", mode="measurement"),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -150,7 +150,7 @@ async def trigger_measure(part: str):
     key = _normalise(part)
     mgr = CameraManager.instance()
     started = time.time()
-    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key, "measurement")
 
     t0 = time.time()
     top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
@@ -171,7 +171,7 @@ async def trigger_inspect(part: str):
     key = _normalise(part)
     mgr = CameraManager.instance()
     started = time.time()
-    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key, "inspect")
 
     t0 = time.time()
     top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)

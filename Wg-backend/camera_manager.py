@@ -253,40 +253,73 @@ class CameraManager:
     def ready(self) -> bool:
         return DEMO_MODE or ("top" in self._cameras and "side" in self._cameras) or len(self._cameras) > 0
 
-    def set_parameters(self, part_name: str):
-        """Dynamically configure the exposure and gain for the specified part."""
+    def set_parameters(self, part_name: str, mode: str = "measurement"):
+        """Dynamically configure the exposure and gain for the specified part and mode."""
         if DEMO_MODE:
             return
 
         key = part_name.lower().replace("-", "").replace(" ", "")
+        m_key = "inspect" if mode.lower() in ("inspect", "surface", "surfacedefect") else "measurement"
 
-        # Preset exposure & gain settings for each part
+        # Preset exposure & gain settings for each part and mode
         presets = {
             "capnut": {
-                "top_exposure": 3000.0, "top_gain": 1.0,
-                "side_exposure": 35000.0, "side_gain": 5.3132
+                "measurement": {
+                    "top_exposure": 3000.0, "top_gain": 1.0,
+                    "side_exposure": 35000.0, "side_gain": 5.3132
+                },
+                "inspect": {
+                    "top_exposure": 2000.0, "top_gain": 0.0,
+                    "side_exposure": 35000.0, "side_gain": 5.3132
+                }
             },
             "stud": {
-                "top_exposure": 3000.0, "top_gain": 1.0,
-                "side_exposure": 30000.0, "side_gain": 5.3132
+                "measurement": {
+                    "top_exposure": 3000.0, "top_gain": 1.0,
+                    "side_exposure": 30000.0, "side_gain": 5.3132
+                },
+                "inspect": {
+                    "top_exposure": 3000.0, "top_gain": 1.0,
+                    "side_exposure": 30000.0, "side_gain": 5.3132
+                }
             },
             "adapter": {
-                "top_exposure": 2000.0, "top_gain": 0.0,
-                "side_exposure": 30000.0, "side_gain": 5.0
+                "measurement": {
+                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "side_exposure": 33571.0, "side_gain": 6.3
+                },
+                "inspect": {
+                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "side_exposure": 33571.0, "side_gain": 6.3
+                }
             },
             "adaptor": {
-                "top_exposure": 2000.0, "top_gain": 0.0,
-                "side_exposure": 30000.0, "side_gain": 5.0
+                "measurement": {
+                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "side_exposure": 33571.0, "side_gain": 6.3
+                },
+                "inspect": {
+                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "side_exposure": 33571.0, "side_gain": 6.3
+                }
             },
             "pin": {
-                "top_exposure": 2000.0, "top_gain": 0.0,
-                "side_exposure": 35000.0, "side_gain": 7.3132
+                "measurement": {
+                    "top_exposure": 2000.0, "top_gain": 0.0,
+                    "side_exposure": 29500.0, "side_gain": 4.0
+                },
+                "inspect": {
+                    "top_exposure": 2000.0, "top_gain": 0.0,
+                    "side_exposure": 35000.0, "side_gain": 7.0
+                }
             }
         }
 
-        p = presets.get(key)
-        if not p:
+        part_presets = presets.get(key)
+        if not part_presets:
             return
+
+        p = part_presets.get(m_key, part_presets["measurement"])
 
         with self._cam_lock:
             top_cam = self._cameras.get("top")

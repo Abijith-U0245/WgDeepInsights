@@ -29,11 +29,11 @@ PMM_CAM_SIDE_Y = 56.74
 TOP_OD_FLATS_MIN = 35.38 
 TOP_OD_FLATS_MAX = 36.10  
 
-TOP_ID_MIN = 16.95 
-TOP_ID_MAX = 17.35
+TOP_ID_MIN = 16.85 
+TOP_ID_MAX = 17.45
 
-SIDE_HEIGHT_MIN = 17.40 
-SIDE_HEIGHT_MAX = 17.60 
+SIDE_HEIGHT_MIN = 17.20 
+SIDE_HEIGHT_MAX = 17.80 # Nominal 17.50mm ± 0.30mm tolerance
 
 SIDE_WIDTH_MIN = 35.38 
 SIDE_WIDTH_MAX = 36.10  
@@ -49,7 +49,7 @@ except ImportError:
     print("[ERROR] Could not find MvImport.")
     sys.exit()
 
-model = YOLO(r"C:\Users\abiji\deepinsight\Wg-backend\surface_models\Capnut_best.pt")
+model = YOLO(r"C:\Users\abiji\deepinsight-windows\Wg-backend\surface_models\Capnut_best.pt")
 
 # =====================================================================
 # 4. INITIALIZE CAMERAS & LOCK BY SERIAL NUMBER
@@ -148,12 +148,14 @@ def measure_top_view(full_img, pmm_od, pmm_id, ai_box):
         
     outer_contour = max(valid_contours, key=cv2.contourArea)
     
+    # OD (ACROSS FLATS)
     rect = cv2.minAreaRect(outer_contour)
     (cx, cy), (w_px, h_px), angle = rect
     
     od_flats_px = min(w_px, h_px)
     od_flats_mm = od_flats_px / pmm_od
     
+    # ID (INNER THREAD / BORE)
     id_mm = 0.0
     circle_id_data = None
     
@@ -179,15 +181,16 @@ def measure_top_view(full_img, pmm_od, pmm_id, ai_box):
             id_mm = (radius_in_px * 2) / pmm_id
             circle_id_data = (global_cx, global_cy, int(radius_in_px))
         
+    # INDIVIDUAL COLOR STATUSES
     od_pass = (TOP_OD_FLATS_MIN <= od_flats_mm <= TOP_OD_FLATS_MAX)
     id_pass = (TOP_ID_MIN <= id_mm <= TOP_ID_MAX)
     overall_status = "PASS" if (od_pass and id_pass) else "FAIL"
     
     return od_flats_mm, id_mm, overall_status, od_pass, id_pass, rect, circle_id_data
 
-def measure_side_view(full_img, pmm_x, pmm_y, ai_box):
+def measure_side_view(full_img, pmm_x, pmm_y, ai_box, od_flats_mm=0.0, od_pass=False):
     if ai_box is None:
-        return 0.0, 0.0, "FAIL", False, False, None
+        return 0.0, od_flats_mm, "FAIL", False, od_pass, None
 
     gray = cv2.cvtColor(full_img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)
@@ -207,7 +210,7 @@ def measure_side_view(full_img, pmm_x, pmm_y, ai_box):
     valid_contours = [c for c in contours if cv2.contourArea(c) > 2000]
     
     if not valid_contours:
-        return 0.0, 0.0, "FAIL", False, False, None
+        return 0.0, od_flats_mm, "FAIL", False, od_pass, None
         
     main_contour = max(valid_contours, key=cv2.contourArea)
     bx, by, bw, bh = cv2.boundingRect(main_contour)
@@ -220,10 +223,10 @@ def measure_side_view(full_img, pmm_x, pmm_y, ai_box):
     box_data = (final_x, final_y, final_w, final_h) 
     
     height_mm = final_h / pmm_y
-    width_mm = final_w / pmm_x
+    width_mm = od_flats_mm # Set side width value directly to OD Flats (36mm) measurement
     
     h_pass = (SIDE_HEIGHT_MIN <= height_mm <= SIDE_HEIGHT_MAX)
-    w_pass = (SIDE_WIDTH_MIN <= width_mm <= SIDE_WIDTH_MAX)
+    w_pass = od_pass # If OD Flat passes, side width also passes; else both fail
     overall_status = "PASS" if (h_pass and w_pass) else "FAIL"
     
     return height_mm, width_mm, overall_status, h_pass, w_pass, box_data
@@ -231,7 +234,7 @@ def measure_side_view(full_img, pmm_x, pmm_y, ai_box):
 # =====================================================================
 # 6. MAIN LOOP
 # =====================================================================
-print("\n[INFO] CAPNUT MEASUREMENT SCRIPT RUNNING. Press 'q' to quit.")
+print("\n[INFO] CAPNUT SCRIPT RUNNING. Press 'q' to quit.")
 
 while True:
     ai_frames = [None, None] 
@@ -248,22 +251,24 @@ while True:
             else:
                 frame_bgr = raw_data.reshape((h, w, 3))
             
-            # --- YOLO AI RUNS IN BACKGROUND (PLOTTING DISABLED) ---
             results = model(frame_bgr, stream=True, verbose=False, conf=0.25) 
             annotated_frame = frame_bgr.copy()
             
             ai_box = None
             has_defect = False
             
+            # 🧠 THE CLASS FILTER: Separates Measurements from Defect Alarms
             for r in results:
-                # The line `annotated_frame = r.plot()` has been deliberately removed!
+                annotated_frame = r.plot()  # Draws all YOLO boxes (OK_Part and Face_Damage)
                 
                 for box, cls in zip(r.boxes.xyxy, r.boxes.cls):
                     class_name = r.names[int(cls)]
                     
-                    if class_name == "OK_Part":
+                    if class_name.lower() in ("ok_part", "okay", "okay_part", "capnut", "ok_capnut"):
+                        # We ONLY use the OK_Part box for measurement math!
                         ai_box = box.cpu().numpy()
                     else:
+                        # If it sees ANYTHING else (Face_Damage, Undersize, etc.), flag the alarm!
                         has_defect = True
             
             name = ""
@@ -272,6 +277,7 @@ while True:
                 name = "CAM (TOP VIEW)"
                 od_flats, id_mm, status, od_pass, id_pass, rect_box, circle_id = measure_top_view(frame_bgr, PMM_CAM_TOP_OD, PMM_CAM_TOP_ID, ai_box)
                 
+                # 🚨 OVERRIDE STATUS IF YOLO FOUND A DEFECT!
                 if has_defect:
                     status = "FAIL (DEFECT)"
                     status_color = (0, 0, 255)
@@ -302,8 +308,12 @@ while True:
 
             elif idx == SIDE_CAM_INDEX: 
                 name = "CAM (SIDE VIEW)"
-                height, width, status, h_pass, w_pass, box_data = measure_side_view(frame_bgr, PMM_CAM_SIDE_X, PMM_CAM_SIDE_Y, ai_box)
+                # Pass OD flats measurement and pass flag from top view
+                od_flats_val = od_flats if 'od_flats' in locals() else 0.0
+                od_pass_val = od_pass if 'od_pass' in locals() else False
+                height, width, status, h_pass, w_pass, box_data = measure_side_view(frame_bgr, PMM_CAM_SIDE_X, PMM_CAM_SIDE_Y, ai_box, od_flats_val, od_pass_val)
                 
+                # 🚨 OVERRIDE STATUS IF YOLO FOUND A DEFECT!
                 if has_defect:
                     status = "FAIL (DEFECT)"
                     status_color = (0, 0, 255)

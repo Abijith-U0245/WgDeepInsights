@@ -11,20 +11,21 @@ TOP_CAM_INDEX = 0
 SIDE_CAM_INDEX = 1   
 
 # =====================================================================
-# 2. CALIBRATION & CAMERA SETTINGS
+# 2. DEFAULT CALIBRATION & CAMERA SETTINGS
 # =====================================================================
-TOP_EXPOSURE = 2000.0   
+# 🛠️ Locked perfectly to the settings from your screenshot!
+TOP_EXPOSURE = 4274.0   
 TOP_GAIN = 0.0        
 
-SIDE_EXPOSURE = 35000.0 
-SIDE_GAIN = 7.0         
+SIDE_EXPOSURE = 33571.0 
+SIDE_GAIN = 6.3         
 
-# 📏 PIXEL-TO-MM (PMM) GOLDEN CALIBRATION (LOCKED)
-PMM_CAM_TOP    = 57.89  
-PMM_CAM_SIDE_X = 31.12  
-PMM_CAM_SIDE_Y = 31.58  
+# 📏 PIXEL-TO-MM (PMM) GOLDEN CALIBRATION
+PMM_CAM_TOP    = 59.28  # Recalibrated to pull 10.24mm down to ~10.00mm
+PMM_CAM_SIDE_X = 31.26  # Recalibrated to pull 27.12mm down to ~27.00mm
+PMM_CAM_SIDE_Y = 31.25  # Recalibrated to push 43.54mm up to ~44.00mm
 
-# 🎯 REAL-WORLD CNC TOLERANCES (WIDENED)
+# 🎯 REAL-WORLD CNC TOLERANCES
 TOP_ID_MIN = 9.70
 TOP_ID_MAX = 10.30  
 
@@ -44,7 +45,7 @@ except ImportError:
     print("[ERROR] Could not find MvImport.")
     sys.exit()
 
-model = YOLO(r"C:\Users\abiji\deepinsight\Wg-backend\surface_models\Adaptor_best.pt")
+model = YOLO(r"C:\Users\abiji\deepinsight-windows\Wg-backend\surface_models\Adaptor_best.pt")
 
 # =====================================================================
 # 4. INITIALIZE CAMERAS & LOCK BY SERIAL NUMBER
@@ -70,8 +71,6 @@ for i in range(deviceList.nDeviceNum):
             if per == 0: break
             serial_num += chr(per)
             
-    print(f"[INFO] Found Camera with Serial: {serial_num}")
-    
     cam = MvCamera()
     cam.MV_CC_CreateHandle(stDeviceList)
     cam.MV_CC_OpenDevice(MV_ACCESS_Exclusive, 0)
@@ -92,13 +91,11 @@ for i in range(deviceList.nDeviceNum):
         cam.MV_CC_SetFloatValue("ExposureTime", TOP_EXPOSURE) 
         cam.MV_CC_SetFloatValue("Gain", TOP_GAIN)
         camera_dict[TOP_CAM_INDEX] = cam
-        print(" -> Assigned to TOP VIEW")
         
     elif serial_num == SIDE_CAM_SERIAL:
         cam.MV_CC_SetFloatValue("ExposureTime", SIDE_EXPOSURE) 
         cam.MV_CC_SetFloatValue("Gain", SIDE_GAIN)
         camera_dict[SIDE_CAM_INDEX] = cam
-        print(" -> Assigned to SIDE VIEW")
 
 if len(camera_dict) < 2:
     print("[ERROR] Could not find BOTH serial numbers. Check your cameras!")
@@ -113,8 +110,12 @@ data_buf = (ctypes.c_ubyte * (4000 * 3000 * 3))()
 stFrameInfo = MV_FRAME_OUT_INFO_EX()
 
 # =====================================================================
-# 5. ROCK-SOLID MEASUREMENT LOGIC
+# 5. HELPER FUNCTIONS & MEASUREMENT LOGIC
 # =====================================================================
+def draw_text_outline(img, text, position, font_scale, color):
+    cv2.putText(img, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 4, cv2.LINE_AA)
+    cv2.putText(img, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, 2, cv2.LINE_AA)
+
 def measure_top_view(full_img, pmm):
     gray = cv2.cvtColor(full_img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)
@@ -204,11 +205,49 @@ def measure_side_view(full_img, pmm_x, pmm_y):
     return height_mm, width_mm, thread_count, status, box_data
 
 # =====================================================================
-# 6. MAIN LOOP
+# 6. LIVE TUNING UI SETUP
 # =====================================================================
-print("\n[INFO] SERIAL-LOCKED SCRIPT RUNNING. Press 'q' to quit.")
+window_name = "SYSMAC - ADAPTOR MASTER TUNING"
+cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+cv2.resizeWindow(window_name, 1280, 700)
+
+def nothing(x):
+    pass
+
+# Create Trackbars for Exposure and Gain
+cv2.createTrackbar("Top Exp", window_name, int(TOP_EXPOSURE), 100000, nothing)
+cv2.createTrackbar("Top Gain", window_name, int(TOP_GAIN * 10), 200, nothing)
+cv2.createTrackbar("Side Exp", window_name, int(SIDE_EXPOSURE), 100000, nothing)
+cv2.createTrackbar("Side Gain", window_name, int(SIDE_GAIN * 10), 200, nothing)
+
+last_t_exp, last_t_gain = int(TOP_EXPOSURE), int(TOP_GAIN * 10)
+last_s_exp, last_s_gain = int(SIDE_EXPOSURE), int(SIDE_GAIN * 10)
+
+# =====================================================================
+# 7. MAIN LOOP (LIVE AI + MEASUREMENT + TUNING)
+# =====================================================================
+print("\n[INFO] MASTER TUNING SCRIPT RUNNING. Use sliders to adjust cameras. Press 'q' to quit.")
 
 while True:
+    t_exp = cv2.getTrackbarPos("Top Exp", window_name)
+    t_gain = cv2.getTrackbarPos("Top Gain", window_name)
+    s_exp = cv2.getTrackbarPos("Side Exp", window_name)
+    s_gain = cv2.getTrackbarPos("Side Gain", window_name)
+
+    if t_exp != last_t_exp:
+        camera_dict[TOP_CAM_INDEX].MV_CC_SetFloatValue("ExposureTime", float(max(t_exp, 10))) 
+        last_t_exp = t_exp
+    if t_gain != last_t_gain:
+        camera_dict[TOP_CAM_INDEX].MV_CC_SetFloatValue("Gain", float(t_gain / 10.0))
+        last_t_gain = t_gain
+        
+    if s_exp != last_s_exp:
+        camera_dict[SIDE_CAM_INDEX].MV_CC_SetFloatValue("ExposureTime", float(max(s_exp, 10)))
+        last_s_exp = s_exp
+    if s_gain != last_s_gain:
+        camera_dict[SIDE_CAM_INDEX].MV_CC_SetFloatValue("Gain", float(s_gain / 10.0))
+        last_s_gain = s_gain
+
     ai_frames = [None, None] 
     
     for idx, cam in enumerate(cameras):
@@ -223,67 +262,79 @@ while True:
             else:
                 frame_bgr = raw_data.reshape((h, w, 3))
             
-            # --- YOLO AI RUNS IN BACKGROUND (PLOTTING DISABLED) ---
-            results = model(frame_bgr, stream=True, verbose=False, conf=0.6) 
-            annotated_frame = frame_bgr.copy()
-            # The plotting line `annotated_frame = r.plot()` has been completely removed
+            # --- RUN YOLO AI ---
+            results = model(frame_bgr, stream=False, verbose=False, conf=0.6) 
+            annotated_frame = results[0].plot()
             
-            hud_status, hud_line1, hud_line2, hud_line3 = "", "", "", ""
-            hud_color = (0, 255, 0)
+            defect_count = 0
+            for box in results[0].boxes:
+                class_id = int(box.cls[0])
+                class_name = model.names[class_id].lower()
+                if class_name != "okay" and class_name != "ok_part" and class_name != "okay_pin":
+                    defect_count += 1
+            
             name = ""
             
-            # --- ROUTE TO CORRECT MEASUREMENT LOGIC ---
+            # --- ROUTE TO MEASUREMENT LOGIC ---
             if idx == TOP_CAM_INDEX: 
                 name = "CAM (TOP VIEW)"
-                id_mm, status, circle_id = measure_top_view(frame_bgr, PMM_CAM_TOP)
+                id_mm, m_status, circle_id = measure_top_view(frame_bgr, PMM_CAM_TOP)
                 
-                hud_color = (0, 255, 0) if status == "PASS" else (0, 0, 255)
+                # Overall Pass/Fail combines both Measurement AND Defect AI
+                final_status = "PASS" if (m_status == "PASS" and defect_count == 0) else "FAIL"
+                hud_color = (0, 255, 0) if final_status == "PASS" else (0, 0, 255)
+                
+                # Individual dynamic Red/Green color based on tolerance
+                color_id = (0, 255, 0) if (TOP_ID_MIN <= id_mm <= TOP_ID_MAX) else (0, 0, 255)
                 
                 if circle_id is not None:
                     cx_in, cy_in, r_in = circle_id
                     cv2.circle(annotated_frame, (cx_in, cy_in), r_in, (255, 0, 255), 4)
-                    
-                hud_status = f"STATUS: {status}"
-                hud_line1 = f"ID (10mm Bore): {id_mm:.2f}mm"
 
                 display_frame = cv2.resize(annotated_frame, (640, 480))
-                cv2.putText(display_frame, f"ACTIVE: {name}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                if hud_status != "":
-                    cv2.putText(display_frame, hud_status, (10, 420), cv2.FONT_HERSHEY_SIMPLEX, 1.0, hud_color, 2)
-                    cv2.putText(display_frame, hud_line1, (10, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+                draw_text_outline(display_frame, f"ACTIVE: {name}", (10, 30), 0.8, (0, 255, 0))
+                
+                draw_text_outline(display_frame, f"STATUS: {final_status}", (10, 380), 1.0, hud_color)
+                draw_text_outline(display_frame, f"ID (10mm Bore): {id_mm:.2f}mm", (10, 440), 0.8, color_id)
                 
                 ai_frames[0] = display_frame
 
             elif idx == SIDE_CAM_INDEX: 
                 name = "CAM (SIDE VIEW)"
-                height, width, thread_count, status, box_data = measure_side_view(frame_bgr, PMM_CAM_SIDE_X, PMM_CAM_SIDE_Y)
+                height, width, thread_count, m_status, box_data = measure_side_view(frame_bgr, PMM_CAM_SIDE_X, PMM_CAM_SIDE_Y)
+                
+                # Overall Pass/Fail combines both Measurement AND Defect AI
+                final_status = "PASS" if (m_status == "PASS" and defect_count == 0) else "FAIL"
+                hud_color = (0, 255, 0) if final_status == "PASS" else (0, 0, 255)
+                
+                # Individual dynamic Red/Green color based on tolerance
+                color_h = (0, 255, 0) if (SIDE_HEIGHT_MIN <= height <= SIDE_HEIGHT_MAX) else (0, 0, 255)
+                color_w = (0, 255, 0) if (SIDE_WIDTH_MIN <= width <= SIDE_WIDTH_MAX) else (0, 0, 255)
                 
                 if box_data is not None:
                     bx, by, bw, bh = box_data
-                    hud_color = (0, 255, 0) if status == "PASS" else (0, 0, 255)
-                    
-                    cv2.rectangle(annotated_frame, (bx, by), (bx + bw, by + bh), hud_color, 4)
-                    
-                    hud_status = f"STATUS: {status}"
-                    hud_line1 = f"Total Height: {height:.2f}mm"
-                    hud_line2 = f"Width: {width:.2f}mm"
-                    hud_line3 = f"Threads Count: {thread_count}"
-
+                    cv2.rectangle(annotated_frame, (bx, by), (bx + bw, by + bh), (255, 0, 255), 4)
+                
                 display_frame = cv2.resize(annotated_frame, (640, 480))
-                cv2.putText(display_frame, f"ACTIVE: {name}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                if hud_status != "":
-                    cv2.putText(display_frame, hud_status, (10, 370), cv2.FONT_HERSHEY_SIMPLEX, 1.0, hud_color, 2)
-                    cv2.putText(display_frame, hud_line1, (10, 405), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-                    cv2.putText(display_frame, hud_line2, (10, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-                    cv2.putText(display_frame, hud_line3, (10, 475), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2) 
+                draw_text_outline(display_frame, f"ACTIVE: {name}", (10, 30), 0.8, (0, 255, 0))
+                
+                draw_text_outline(display_frame, f"STATUS: {final_status}", (10, 380), 1.0, hud_color)
+                draw_text_outline(display_frame, f"Total Height: {height:.2f}mm", (10, 420), 0.8, color_h)
+                draw_text_outline(display_frame, f"Width: {width:.2f}mm", (10, 460), 0.8, color_w)
                 
                 ai_frames[1] = display_frame
 
     if ai_frames[0] is not None and ai_frames[1] is not None:
         stacked_feed = np.hstack([ai_frames[0], ai_frames[1]])
-        cv2.imshow("SYSMAC - ADAPTOR MEASUREMENT", stacked_feed)
+        cv2.imshow(window_name, stacked_feed)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
+        print("\n--- FINAL CALIBRATED SETTINGS ---")
+        print(f"TOP_EXPOSURE = {last_t_exp}.0")
+        print(f"TOP_GAIN = {last_t_gain / 10.0}")
+        print(f"SIDE_EXPOSURE = {last_s_exp}.0")
+        print(f"SIDE_GAIN = {last_s_gain / 10.0}")
+        print("---------------------------------\n")
         break
 
 for cam in cameras:

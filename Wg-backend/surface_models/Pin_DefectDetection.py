@@ -17,7 +17,7 @@ TOP_EXPOSURE = 2000.0
 TOP_GAIN = 0.0        
 
 SIDE_EXPOSURE = 35000.0 
-SIDE_GAIN = 7.3132         
+SIDE_GAIN = 7.0         
 
 # =====================================================================
 # 3. IMPORT SDK & LOAD AI
