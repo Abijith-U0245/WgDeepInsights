@@ -24,12 +24,33 @@ import contextlib
 import cv2
 import numpy as np
 
+from typing import Optional
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 
 from camera_manager import CameraManager
 from part_runners import run_measurement, run_inspection
+
+
+class BatchInspectRequest(BaseModel):
+    top_images: list[str] = []
+    side_images: list[str] = []
+
+
+def _b64_to_frame(b64_str: Optional[str]) -> Optional[np.ndarray]:
+    if not b64_str:
+        return None
+    try:
+        if "," in b64_str:
+            b64_str = b64_str.split(",", 1)[1]
+        data = base64.b64decode(b64_str)
+        arr = np.frombuffer(data, dtype=np.uint8)
+        return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    except Exception as e:
+        print(f"[ERROR] Failed decoding b64 image: {e}")
+        return None
 
 
 @contextlib.asynccontextmanager
@@ -353,18 +374,27 @@ async def process_pair(part: str, pair_index: int = 1):
 
 
 @app.post("/run-test-batch/{part}")
-async def run_test_batch(part: str, count: int = 1):
+async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = None, count: int = 1):
     """
-    Run multi-pair batch inspection for up to N captured image pairs.
-    Pair #1: Dimensional Measurement + Surface Defect Inspection (2 dim + 2 surface images).
-    Pairs #2..N: Surface Defect Inspection ONLY (0 dim + 2 surface images per pair).
+    Run multi-pair batch inspection for captured image pairs.
+    If request payload contains top_images or side_images, evaluates those exact captured snapshot frames.
+    Otherwise, grabs live/cached frames for up to N pairs.
     """
     key = _normalise(part)
     mgr = CameraManager.instance()
     total_start = time.time()
     await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
 
-    num_pairs = max(1, min(count, 5))
+    top_imgs = request.top_images if request and request.top_images else []
+    side_imgs = request.side_images if request and request.side_images else []
+
+    if top_imgs or side_imgs:
+        num_pairs = max(len(top_imgs), len(side_imgs))
+        has_custom_snapshots = True
+    else:
+        num_pairs = max(1, min(count, 5))
+        has_custom_snapshots = False
+
     annotated_frames = []
     all_measurements = []
     all_defects = []
@@ -375,26 +405,44 @@ async def run_test_batch(part: str, count: int = 1):
     for pair_idx in range(num_pairs):
         pair_num = pair_idx + 1
 
-        # Retrieve pre-fetched background result if available
-        cached_res = PRE_FETCHED_PAIRS.get((key, pair_num))
-        if cached_res:
-            measure_res = cached_res["measure_res"]
-            inspect_res = cached_res["inspect_res"]
-        else:
-            top, side = await loop.run_in_executor(None, mgr.grab_pair)
-            if pair_num == 1:
-                measure_res, inspect_res = await asyncio.gather(
-                    loop.run_in_executor(None, run_measurement, key, top, side),
-                    loop.run_in_executor(None, run_inspection,  key, top, side),
-                )
-            else:
-                inspect_res = await loop.run_in_executor(None, run_inspection, key, top, side)
-                measure_res = {
+        if has_custom_snapshots:
+            top_b64 = top_imgs[pair_idx] if pair_idx < len(top_imgs) else None
+            side_b64 = side_imgs[pair_idx] if pair_idx < len(side_imgs) else None
+            top = _b64_to_frame(top_b64)
+            side = _b64_to_frame(side_b64)
+
+            async def _dummy_measure():
+                return {
                     "status": "PASS",
                     "measurements": [],
                     "top_annotated_b64": "",
                     "side_annotated_b64": "",
                 }
+
+            measure_task = loop.run_in_executor(None, run_measurement, key, top, side) if pair_num == 1 else _dummy_measure()
+            inspect_task = loop.run_in_executor(None, run_inspection, key, top, side)
+
+            measure_res, inspect_res = await asyncio.gather(measure_task, inspect_task)
+        else:
+            cached_res = PRE_FETCHED_PAIRS.get((key, pair_num))
+            if cached_res:
+                measure_res = cached_res["measure_res"]
+                inspect_res = cached_res["inspect_res"]
+            else:
+                top, side = await loop.run_in_executor(None, mgr.grab_pair)
+                if pair_num == 1:
+                    measure_res, inspect_res = await asyncio.gather(
+                        loop.run_in_executor(None, run_measurement, key, top, side),
+                        loop.run_in_executor(None, run_inspection,  key, top, side),
+                    )
+                else:
+                    inspect_res = await loop.run_in_executor(None, run_inspection, key, top, side)
+                    measure_res = {
+                        "status": "PASS",
+                        "measurements": [],
+                        "top_annotated_b64": "",
+                        "side_annotated_b64": "",
+                    }
 
         measure_pass = measure_res["status"] == "PASS"
         inspect_pass = inspect_res["status"] == "pass"

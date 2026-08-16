@@ -307,7 +307,9 @@ function NewInspectionPage() {
     }
     setRunning("inspect");
     try {
-      const bRes = await runBatchTest(part.part_name, totalPairs);
+      const topImgs = topSnapshots.map((s) => s.preview);
+      const sideImgs = sideSnapshots.map((s) => s.preview);
+      const bRes = await runBatchTest(part.part_name, totalPairs, topImgs, sideImgs);
       setBatchResult(bRes);
       toast.success("Inspected", { duration: 1000 });
     } catch (err) {
@@ -892,37 +894,49 @@ function NewInspectionPage() {
                         </div>
                       )}
 
-                      {/* Surface Defect Analysis Frames (All Captured Pairs - up to 10 Frames) */}
-                      <div className="space-y-2 rounded-xl border border-border bg-card p-4">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
-                          🔍 Surface Defect Model Analysis (All {batchResult.annotated_frames.length} Pairs — {batchResult.annotated_frames.length * 2} Frames)
-                        </h4>
-                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                          {batchResult.annotated_frames.flatMap((pair) => [
-                            {
+                      {/* Surface Defect Analysis Frames (All Captured Frames - filtered) */}
+                      {(() => {
+                        const surfaceInspectFrames = batchResult.annotated_frames.flatMap((pair) => {
+                          const items = [];
+                          if (pair.top_inspect_b64) {
+                            items.push({
                               key: `p${pair.pair_index}-top-inspect`,
                               label: `Pair #${pair.pair_index} Top`,
                               b64: pair.top_inspect_b64,
-                            },
-                            {
+                            });
+                          }
+                          if (pair.side_inspect_b64) {
+                            items.push({
                               key: `p${pair.pair_index}-side-inspect`,
                               label: `Pair #${pair.pair_index} Side`,
                               b64: pair.side_inspect_b64,
-                            },
-                          ]).map((item) => (
-                            <div key={item.key} className="space-y-1 rounded-lg border border-border bg-muted/20 p-1.5">
-                              <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-                                <span>{item.label}</span>
-                              </div>
-                              <img
-                                src={`data:image/jpeg;base64,${item.b64}`}
-                                alt={item.label}
-                                className="w-full rounded-md border border-border object-contain bg-black h-28"
-                              />
+                            });
+                          }
+                          return items;
+                        });
+
+                        return (
+                          <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
+                              🔍 Surface Defect Model Analysis ({surfaceInspectFrames.length} Frames — {batchResult.total_pairs} Pair{batchResult.total_pairs === 1 ? "" : "s"})
+                            </h4>
+                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                              {surfaceInspectFrames.map((item) => (
+                                <div key={item.key} className="space-y-1 rounded-lg border border-border bg-muted/20 p-1.5">
+                                  <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+                                    <span>{item.label}</span>
+                                  </div>
+                                  <img
+                                    src={`data:image/jpeg;base64,${item.b64}`}
+                                    alt={item.label}
+                                    className="w-full rounded-md border border-border object-contain bg-black h-28"
+                                  />
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Measurements Table & Defects List */}
                       <div className="grid gap-6 mt-6 lg:grid-cols-3">

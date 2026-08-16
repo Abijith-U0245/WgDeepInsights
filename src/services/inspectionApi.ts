@@ -185,10 +185,24 @@ export async function processPair(partName: string, pairIndex: number): Promise<
   return pyPost<{ status: string; pair_index: number }>(`/process-pair/${encodeURIComponent(key)}?pair_index=${pairIndex}`);
 }
 
-/** Run multi-pair batch inspection for N captured image pairs. */
-export async function runBatchTest(partName: string, count: number): Promise<RunBatchTestResult> {
+/** Run multi-pair batch inspection for captured image pairs. */
+export async function runBatchTest(
+  partName: string,
+  count: number,
+  topImages: string[] = [],
+  sideImages: string[] = []
+): Promise<RunBatchTestResult> {
   const key = partName.toLowerCase();
-  return pyPost<RunBatchTestResult>(`/run-test-batch/${encodeURIComponent(key)}?count=${count}`);
+  const res = await fetch(`${PY_API}/run-test-batch/${encodeURIComponent(key)}?count=${count}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ top_images: topImages, side_images: sideImages }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Backend run-test-batch failed (${res.status}): ${text}`);
+  }
+  return (await res.json()) as RunBatchTestResult;
 }
 
 

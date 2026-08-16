@@ -6,6 +6,7 @@ Each runner receives numpy frames (top, side) and returns a structured dict.
 No camera I/O here — that's done by CameraManager.
 """
 
+from typing import Optional
 import os
 import sys
 import time
@@ -313,7 +314,7 @@ def _pin_side(img, pmm_x, pmm_y, pmm_hole):
 # PUBLIC API
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_measurement(part: str, top: np.ndarray, side: np.ndarray) -> dict:
+def run_measurement(part: str, top: Optional[np.ndarray], side: Optional[np.ndarray]) -> dict:
     """
     Runs dimensional measurement for the specified part.
     Returns:
@@ -325,14 +326,16 @@ def run_measurement(part: str, top: np.ndarray, side: np.ndarray) -> dict:
         }
     """
     key = part.lower().replace("-", "").replace(" ", "")
-    top_ann  = top.copy()
-    side_ann = side.copy()
+    top_ann  = top.copy() if top is not None else np.zeros((480, 640, 3), dtype=np.uint8)
+    side_ann = side.copy() if side is not None else np.zeros((480, 640, 3), dtype=np.uint8)
     rows: list[dict] = []
 
     model = _get_model(key)
 
     # Run YOLO to get object bounding box (for masking)
-    def _get_ai_box(frame: np.ndarray) -> np.ndarray | None:
+    def _get_ai_box(frame: Optional[np.ndarray]) -> np.ndarray | None:
+        if frame is None:
+            return None
         results = list(model(frame, stream=True, verbose=False, conf=0.25))
         for r in results:
             for box, cls in zip(r.boxes.xyxy, r.boxes.cls):
@@ -432,7 +435,7 @@ def run_measurement(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     }
 
 
-def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
+def run_inspection(part: str, top: Optional[np.ndarray], side: Optional[np.ndarray]) -> dict:
     """
     Runs YOLO surface defect detection for the specified part.
     Returns:
@@ -466,8 +469,10 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     top_has_boxes  = False
     side_has_boxes = False
 
-    def _process(frame: np.ndarray, cam_label: str):
+    def _process(frame: Optional[np.ndarray], cam_label: str):
         nonlocal top_max_conf, side_max_conf, top_has_boxes, side_has_boxes
+        if frame is None:
+            return None
         results = list(model(frame, stream=True, verbose=False, conf=0.25))
         ann = frame.copy()
         cam_boxes = 0
@@ -515,10 +520,17 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
     top_label = "NO DEFECTS" if len(top_defects) == 0 else f"{len(top_defects)} DEFECT(S)"
     side_label = "NO DEFECTS" if len(side_defects) == 0 else f"{len(side_defects)} DEFECT(S)"
 
-    top_disp  = cv2.resize(top_ann,  (640,480))
-    side_disp = cv2.resize(side_ann, (640,480))
-    cv2.putText(top_disp,  f"INSPECT: {top_label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, top_col, 2)
-    cv2.putText(side_disp, f"INSPECT: {side_label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, side_col, 2)
+    top_b64 = ""
+    if top_ann is not None:
+        top_disp  = cv2.resize(top_ann,  (640,480))
+        cv2.putText(top_disp,  f"INSPECT: {top_label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, top_col, 2)
+        top_b64 = _frame_to_b64(top_disp)
+
+    side_b64 = ""
+    if side_ann is not None:
+        side_disp = cv2.resize(side_ann, (640,480))
+        cv2.putText(side_disp, f"INSPECT: {side_label}", (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, side_col, 2)
+        side_b64 = _frame_to_b64(side_disp)
 
     return {
         "status":         status,
@@ -529,6 +541,6 @@ def run_inspection(part: str, top: np.ndarray, side: np.ndarray) -> dict:
             "side_conf": side_max_conf,
             "avg_conf":  avg_conf,
         },
-        "top_annotated_b64":  _frame_to_b64(top_disp),
-        "side_annotated_b64": _frame_to_b64(side_disp),
+        "top_annotated_b64":  top_b64,
+        "side_annotated_b64": side_b64,
     }
