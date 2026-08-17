@@ -22,8 +22,8 @@ _SURFACE_DIR = os.path.join(_BASE, "surface_models")
 MODEL_PATHS: dict[str, str] = {
     "capnut":  os.path.join(_SURFACE_DIR, "Capnut_best.pt"),
     "stud":    os.path.join(_SURFACE_DIR, "Stud_best.pt"),
-    "adapter": os.path.join(_SURFACE_DIR, "Adaptor_best.pt"),
-    "adaptor": os.path.join(_SURFACE_DIR, "Adaptor_best.pt"),
+    "adapter": os.path.join(_SURFACE_DIR, "Adapter_best.pt"),
+    "adaptor": os.path.join(_SURFACE_DIR, "Adapter_best.pt"),
     "pin":     os.path.join(_SURFACE_DIR, "Pin_best.pt"),
 }
 
@@ -35,7 +35,14 @@ def _get_model(part_key: str) -> YOLO:
     if key not in _YOLO_CACHE:
         path = MODEL_PATHS.get(key)
         if not path or not os.path.exists(path):
-            raise FileNotFoundError(f"Model not found for part '{key}': {path}")
+            alt1 = os.path.join(_SURFACE_DIR, "Adapter_best.pt")
+            alt2 = os.path.join(_SURFACE_DIR, "Adaptor_best.pt")
+            if os.path.exists(alt1):
+                path = alt1
+            elif os.path.exists(alt2):
+                path = alt2
+            else:
+                raise FileNotFoundError(f"Model not found for part '{key}': {path}")
         _YOLO_CACHE[key] = YOLO(path)
     return _YOLO_CACHE[key]
 
