@@ -141,7 +141,7 @@ def _capnut_side(img, pmm_x, pmm_y, ai_box):
 
 _STUD = dict(
     PMM_TOP=33.24, PMM_SIDE_Y=31.57,
-    TOP_OD_MIN=7.70, TOP_OD_MAX=8.10,
+    TOP_OD_MIN=7.60, TOP_OD_MAX=8.20,
     SIDE_H_MIN=37.30, SIDE_H_MAX=38.90,
 )
 
