@@ -151,12 +151,25 @@ function NewInspectionPage() {
   const { data: parts = [], error: partsError, isLoading: partsLoading } = useParts();
   const part = parts.find((p) => p.id === partId);
 
-  const { data: models = [], error: modelsError, isLoading: modelsLoading } = useModels(undefined, part?.part_name);
-  const { data: specs = [], error: specsError, isLoading: specsLoading } = useSpecifications(partId || undefined, part?.part_name);
+  const activePartName = useMemo(() => {
+    if (part?.part_name) return part.part_name;
+    const match = parts.find(
+      (p) =>
+        p.id === partId ||
+        p.id === searchPart ||
+        p.part_name.toLowerCase().replace(/[^a-z0-9]/g, "") === (searchPart || partId).toLowerCase().replace(/[^a-z0-9]/g, "") ||
+        p.part_name.toLowerCase().includes((searchPart || partId).toLowerCase())
+    );
+    if (match) return match.part_name;
+    return searchPart || "capnut";
+  }, [part, parts, partId, searchPart]);
+
+  const { data: models = [], error: modelsError, isLoading: modelsLoading } = useModels(undefined, activePartName);
+  const { data: specs = [], error: specsError, isLoading: specsLoading } = useSpecifications(partId || undefined, activePartName);
 
   // Auto-select part from URL query param (e.g. from Dashboard Inspect button) and jump straight to step 1
   useEffect(() => {
-    if (!searchPart || parts.length === 0) return;
+    if (!searchPart) return;
     const match = parts.find(
       (p) =>
         p.id === searchPart ||
@@ -166,8 +179,10 @@ function NewInspectionPage() {
     );
     if (match) {
       setPartId(match.id);
-      setStep(1); // Jump directly to camera inspection feed!
+    } else {
+      setPartId(searchPart);
     }
+    setStep(1); // Jump directly to camera inspection feed!
   }, [searchPart, parts]);
 
   // Auto-select model ID in background
@@ -299,7 +314,6 @@ function NewInspectionPage() {
   }
 
   async function handleInspectPart() {
-    if (!part) return;
     const totalPairs = Math.max(topSnapshots.length, sideSnapshots.length);
     if (totalPairs === 0) {
       toast.error("Please capture at least 1 image before running inspection.", { duration: 1500 });
@@ -309,7 +323,7 @@ function NewInspectionPage() {
     try {
       const topImgs = topSnapshots.map((s) => s.preview);
       const sideImgs = sideSnapshots.map((s) => s.preview);
-      const bRes = await runBatchTest(part.part_name, totalPairs, topImgs, sideImgs);
+      const bRes = await runBatchTest(activePartName, totalPairs, topImgs, sideImgs);
       setBatchResult(bRes);
       toast.success("Inspected", { duration: 1000 });
     } catch (err) {
@@ -683,8 +697,8 @@ function NewInspectionPage() {
             >
               <div className="grid gap-4 md:grid-cols-2">
                 {[
-                  { label: "CAM 1 / TOP VIEW", url: topStreamUrl(part?.part_name ?? "capnut") },
-                  { label: "CAM 2 / SIDE VIEW", url: sideStreamUrl(part?.part_name ?? "capnut") },
+                  { label: "CAM 1 / TOP VIEW", url: topStreamUrl(activePartName) },
+                  { label: "CAM 2 / SIDE VIEW", url: sideStreamUrl(activePartName) },
                 ].map((camera) => (
                   <div
                     key={camera.label}
@@ -692,6 +706,7 @@ function NewInspectionPage() {
                   >
                     {backendStatus !== "offline" ? (
                       <img
+                        key={camera.url}
                         src={camera.url}
                         alt={`${camera.label} live camera feed`}
                         className="h-full aspect-square max-w-full object-contain bg-slate-950"

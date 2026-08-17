@@ -95,7 +95,7 @@ const PART_PERFORMANCE_DATA = [
     grabLatencyMs: 15,
     totalLatencyMs: 95,
     featuresTested: "OD Flats (36mm), ID Bore (17.15mm), Side Height (17.5mm), Side Width (36mm)",
-    modelWeights: "Capnut_best.pt (YOLOv8)",
+    modelWeights: "Capnut_best.pt",
     status: "Optimal",
   },
   {
@@ -108,7 +108,7 @@ const PART_PERFORMANCE_DATA = [
     grabLatencyMs: 14,
     totalLatencyMs: 88,
     featuresTested: "Shank OD (7.9mm), Total Height (38.1mm)",
-    modelWeights: "Stud_best.pt (YOLOv8)",
+    modelWeights: "Stud_best.pt",
     status: "Optimal",
   },
   {
@@ -121,7 +121,7 @@ const PART_PERFORMANCE_DATA = [
     grabLatencyMs: 16,
     totalLatencyMs: 103,
     featuresTested: "ID Bore (10mm), Side Height (44mm), Side Width (27mm)",
-    modelWeights: "Adaptor_best.pt (YOLOv8)",
+    modelWeights: "Adapter_best.pt",
     status: "Optimal",
   },
   {
@@ -134,7 +134,7 @@ const PART_PERFORMANCE_DATA = [
     grabLatencyMs: 15,
     totalLatencyMs: 99,
     featuresTested: "OD (Ø11.979mm), Length (87.6mm), Width (Ø11.979mm), Hole 1 & 2 Dia (Ø3.2mm)",
-    modelWeights: "Pin_best.pt (YOLOv8)",
+    modelWeights: "Pin_best.pt",
     status: "Optimal",
   },
 ];
@@ -159,7 +159,7 @@ function ModelPerformanceReport() {
             <Cpu className="size-4" />
           </div>
           <p className="text-2xl font-bold text-blue-300">92.58%</p>
-          <p className="text-[11px] text-muted-foreground">YOLOv8 Surface Defect Detection</p>
+          <p className="text-[11px] text-muted-foreground">Surface Defect Model</p>
         </div>
 
         <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-1">
@@ -231,7 +231,7 @@ function ModelPerformanceReport() {
       </SectionCard>
 
       {/* Individual Part Model Specifications */}
-      <SectionCard title="Individual Model & Blueprint Specifications" subtitle="Deep learning weights and features evaluated per part">
+      <SectionCard title="Individual Model & Blueprint Specifications" subtitle="Surface detection models and features evaluated per part">
         <div className="grid gap-4 md:grid-cols-2">
           {PART_PERFORMANCE_DATA.map((part) => (
             <div key={part.name} className="rounded-xl border border-border bg-card p-4 space-y-3">
