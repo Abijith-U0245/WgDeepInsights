@@ -162,16 +162,35 @@ class CameraManager:
             cam.MV_CC_SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF)
 
             if serial == TOP_CAM_SERIAL:
+                try:
+                    cam.MV_CC_SetEnumValue("ExposureAuto", 0)
+                    cam.MV_CC_SetEnumValue("GainAuto", 0)
+                    cam.MV_CC_SetFloatValue("ExposureTime", 3500.0)
+                    cam.MV_CC_SetFloatValue("Gain", 1.5)
+                except Exception as e:
+                    print(f"[CAM] Initial top params warning: {e}")
                 cam.MV_CC_StartGrabbing()
                 self._cameras["top"] = cam
                 print(f"[CAM] Top camera ready ({serial})")
 
             elif serial == SIDE_CAM_SERIAL:
+                try:
+                    cam.MV_CC_SetEnumValue("ExposureAuto", 0)
+                    cam.MV_CC_SetEnumValue("GainAuto", 0)
+                    cam.MV_CC_SetFloatValue("ExposureTime", 35000.0)
+                    cam.MV_CC_SetFloatValue("Gain", 5.3132)
+                except Exception as e:
+                    print(f"[CAM] Initial side params warning: {e}")
                 cam.MV_CC_StartGrabbing()
                 self._cameras["side"] = cam
                 print(f"[CAM] Side camera ready ({serial})")
 
             else:
+                try:
+                    cam.MV_CC_SetEnumValue("ExposureAuto", 0)
+                    cam.MV_CC_SetEnumValue("GainAuto", 0)
+                except Exception:
+                    pass
                 cam.MV_CC_StartGrabbing()
                 if "top" not in self._cameras:
                     self._cameras["top"] = cam
@@ -265,11 +284,11 @@ class CameraManager:
         presets = {
             "capnut": {
                 "measurement": {
-                    "top_exposure": 3000.0, "top_gain": 1.0,
+                    "top_exposure": 3500.0, "top_gain": 1.5,
                     "side_exposure": 35000.0, "side_gain": 5.3132
                 },
                 "inspect": {
-                    "top_exposure": 2000.0, "top_gain": 0.0,
+                    "top_exposure": 3500.0, "top_gain": 1.5,
                     "side_exposure": 35000.0, "side_gain": 5.3132
                 }
             },
@@ -285,31 +304,31 @@ class CameraManager:
             },
             "adapter": {
                 "measurement": {
-                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "top_exposure": 4274.0, "top_gain": 1.0,
                     "side_exposure": 33571.0, "side_gain": 6.3
                 },
                 "inspect": {
-                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "top_exposure": 4274.0, "top_gain": 1.0,
                     "side_exposure": 33571.0, "side_gain": 6.3
                 }
             },
             "adaptor": {
                 "measurement": {
-                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "top_exposure": 4274.0, "top_gain": 1.0,
                     "side_exposure": 33571.0, "side_gain": 6.3
                 },
                 "inspect": {
-                    "top_exposure": 4274.0, "top_gain": 0.0,
+                    "top_exposure": 4274.0, "top_gain": 1.0,
                     "side_exposure": 33571.0, "side_gain": 6.3
                 }
             },
             "pin": {
                 "measurement": {
-                    "top_exposure": 2000.0, "top_gain": 0.0,
-                    "side_exposure": 29500.0, "side_gain": 4.0
+                    "top_exposure": 3000.0, "top_gain": 1.0,
+                    "side_exposure": 35000.0, "side_gain": 7.0
                 },
                 "inspect": {
-                    "top_exposure": 2000.0, "top_gain": 0.0,
+                    "top_exposure": 3000.0, "top_gain": 1.0,
                     "side_exposure": 35000.0, "side_gain": 7.0
                 }
             }
