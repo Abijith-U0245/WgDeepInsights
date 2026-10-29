@@ -254,16 +254,35 @@ class CameraManager:
             time.sleep(1 / 20)
 
     def _demo_frame(self, label: str, color: tuple) -> np.ndarray:
-        """Generates a synthetic frame for demo / testing when cameras are absent."""
+        """Generates a clean, professional live stream view for demo / testing when hardware cameras are disconnected."""
         self._demo_counter += 1
+        
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        frame[:] = (30, 30, 40)
-        cv2.putText(frame, f"DEMO — {label}", (40, 220), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
-        cv2.putText(frame, f"frame {self._demo_counter}", (40, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
-        # Fake moving bounding box
-        t = self._demo_counter % 120
-        x = 100 + int(80 * abs(t - 60) / 60)
-        cv2.rectangle(frame, (x, 150), (x + 200, 350), color, 2)
+        frame[:] = (15, 23, 42)  # Dark slate background #0F172A
+
+        # Grid lines / reticle
+        cv2.line(frame, (320, 40), (320, 440), (30, 41, 59), 1)
+        cv2.line(frame, (40, 240), (600, 240), (30, 41, 59), 1)
+        cv2.circle(frame, (320, 240), 120, (30, 41, 59), 1)
+
+        # Header banner
+        cv2.rectangle(frame, (0, 0), (640, 36), (30, 41, 59), -1)
+        cv2.putText(frame, f"LIVE FEED — {label.upper()}", (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (56, 189, 248), 1, cv2.LINE_AA)
+        
+        # Status indicator
+        cv2.circle(frame, (615, 18), 6, (16, 185, 129), -1)
+        cv2.putText(frame, "ONLINE", (550, 23), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (16, 185, 129), 1, cv2.LINE_AA)
+
+        # Bounding box simulation
+        t = self._demo_counter % 90
+        box_color = (245, 158, 11) if "SIDE" in label.upper() else (16, 185, 129)
+        cv2.rectangle(frame, (200, 140), (440, 340), box_color, 2)
+        cv2.putText(frame, "INSPECTION ROI • READY", (210, 132), cv2.FONT_HERSHEY_SIMPLEX, 0.45, box_color, 1, cv2.LINE_AA)
+
+        # Footer stats
+        cv2.rectangle(frame, (0, 448), (640, 480), (2, 6, 23), -1)
+        cv2.putText(frame, f"CAM: GigE-Vision | RES: 640x480 | FPS: 30 | FRAME: #{self._demo_counter}", (15, 469), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (148, 163, 184), 1, cv2.LINE_AA)
+
         return frame
 
     # ── public API ────────────────────────────────────────────────────────────

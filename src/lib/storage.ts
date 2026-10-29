@@ -28,13 +28,17 @@ export async function uploadFile(bucket: Bucket, file: File, prefix: string) {
 
 export async function signedUrl(ref: string | null | undefined) {
   if (!ref) return null;
-  if (ref.startsWith("http")) return ref;
+  if (ref.startsWith("http") || ref.startsWith("data:") || ref.startsWith("/") || ref.startsWith("blob:")) return ref;
   const parsed = decodeRef(ref);
-  if (!parsed) return null;
-  const { data } = await supabase.storage
-    .from(parsed.bucket)
-    .createSignedUrl(parsed.path, 60 * 60);
-  return data?.signedUrl ?? null;
+  if (!parsed) return ref;
+  try {
+    const { data } = await supabase.storage
+      .from(parsed.bucket)
+      .createSignedUrl(parsed.path, 60 * 60);
+    return data?.signedUrl ?? ref;
+  } catch {
+    return ref;
+  }
 }
 
 export async function signedUrls(refs: Array<string | null | undefined>) {

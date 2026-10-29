@@ -32,6 +32,7 @@ from fastapi.responses import JSONResponse, StreamingResponse, Response
 
 from camera_manager import CameraManager
 from part_runners import run_measurement, run_inspection
+import db
 
 
 class BatchInspectRequest(BaseModel):
@@ -485,6 +486,27 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
     overall_verdict = "reject" if has_rejection else "ok"
     total_ms = int((time.time() - total_start) * 1000)
 
+    # Save batch inspection result to local PostgreSQL
+    try:
+        db_images = []
+        for frame_item in annotated_frames:
+            p_idx = frame_item.get("pair_index", 1)
+            if frame_item.get("top_measure_b64"):
+                db_images.append({"image_type": f"Pair {p_idx} - Top View", "image_url": frame_item["top_measure_b64"]})
+            if frame_item.get("side_measure_b64"):
+                db_images.append({"image_type": f"Pair {p_idx} - Side View", "image_url": frame_item["side_measure_b64"]})
+
+        db.save_inspection(
+            part_name=part,
+            status="PASS" if overall_verdict == "ok" else "FAIL",
+            duration=round(total_ms / 1000.0, 2),
+            measurements=all_measurements,
+            defects=all_defects,
+            images=db_images,
+        )
+    except Exception as e:
+        print(f"[DB] Error saving batch inspection to local postgres: {e}")
+
     return JSONResponse(content={
         "verdict": overall_verdict,
         "total_pairs": num_pairs,
@@ -493,5 +515,70 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
         "defects": all_defects,
         "duration_ms": total_ms,
     })
+
+
+# ── Local PostgreSQL Database REST Endpoints ─────────────────────────
+
+@app.get("/api/parts")
+async def get_db_parts():
+    try:
+        return db.get_parts()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/specifications")
+async def get_db_specifications(part_id: Optional[str] = None):
+    try:
+        return db.get_specifications(part_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/models")
+async def get_db_models(part_id: Optional[str] = None):
+    try:
+        return db.get_models(part_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/inspections")
+async def get_db_inspections(limit: int = 500):
+    try:
+        return db.get_inspections(limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/inspections/{inspection_id}")
+async def get_db_inspection_detail(inspection_id: str):
+    try:
+        return db.get_inspection_detail(inspection_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/profiles")
+async def get_db_profiles():
+    try:
+        return db.get_profiles()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/user_roles")
+async def get_db_user_roles():
+    try:
+        return db.get_user_roles()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi import FastAPI, HTTPException, Body
+
+@app.post("/api/{table_name}")
+async def post_db_insert(table_name: str, payload: dict | list = Body(...)):
+    try:
+        res = db.insert_row(table_name, payload)
+        return res
+    except Exception as e:
+        print(f"[DB POST Error] {table_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 

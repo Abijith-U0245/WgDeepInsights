@@ -116,14 +116,25 @@ function ReportDetailPage() {
             {data.defects.length === 0 ? (
               <p className="type-body-m text-muted-foreground">No surface defects detected.</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {data.defects.map((d) => (
-                  <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
-                    <div>
-                      <p className="type-body-m font-medium text-foreground">{d.defect_name}</p>
-                      <p className="type-caption text-muted-foreground">Confidence {(Number(d.confidence) * 100).toFixed(1)}%</p>
+                  <li key={d.id} className="space-y-2 rounded-lg border border-border bg-background p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="type-body-m font-medium text-foreground">{d.defect_name}</p>
+                        <p className="type-caption text-muted-foreground">Confidence {(Number(d.confidence) * 100).toFixed(1)}%</p>
+                      </div>
+                      <StatusBadge status={d.status} />
                     </div>
-                    <StatusBadge status={d.status} />
+                    {d.annotated_image && (
+                      <div className="mt-2 overflow-hidden rounded-md border border-border bg-black">
+                        <StorageImage
+                          refValue={d.annotated_image}
+                          alt={d.defect_name}
+                          className="h-36 w-full object-contain"
+                        />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -134,17 +145,22 @@ function ReportDetailPage() {
             {data.images.length === 0 ? (
               <p className="type-body-m text-muted-foreground">No frames stored for this inspection.</p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {data.images.map((img) => (
-                  <div key={img.id} className="space-y-1 rounded-lg border border-border bg-muted/20 p-1.5">
-                    <p className="text-[11px] font-mono text-muted-foreground truncate capitalize">
-                      {img.image_type.replace(/_/g, " ")}
-                    </p>
-                    <StorageImage
-                      refValue={img.image_url}
-                      alt={img.image_type}
-                      className="aspect-square w-full rounded-md object-contain bg-black"
-                    />
+                  <div key={img.id} className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-mono font-medium text-foreground capitalize">
+                        {img.image_type.replace(/_/g, " ")}
+                      </p>
+                      <span className="text-[10px] font-mono text-muted-foreground">LIVE CAPTURE</span>
+                    </div>
+                    <div className="overflow-hidden rounded-md border border-border bg-black">
+                      <StorageImage
+                        refValue={img.image_url}
+                        alt={img.image_type}
+                        className="h-44 w-full object-contain"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
