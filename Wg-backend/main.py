@@ -580,5 +580,16 @@ async def post_db_insert(table_name: str, payload: dict | list = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
+@app.delete("/api/inspections/{inspection_id}")
+async def delete_inspection_endpoint(inspection_id: str):
+    try:
+        result = db.delete_inspection(inspection_id)
+        if not result["deleted"]:
+            raise HTTPException(status_code=404, detail="Inspection not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[DB DELETE Error] inspections/{inspection_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 

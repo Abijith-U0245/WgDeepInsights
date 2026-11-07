@@ -1,0 +1,8 @@
+('id', 'uuid')
+('part_id', 'uuid')
+('parameter', 'text')
+('expected_value', 'numeric')
+('tolerance', 'numeric')
+('unit', 'text')
+('notes', 'text')
+('created_at', 'timestamp with time zone')

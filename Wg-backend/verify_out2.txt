@@ -1,0 +1,21 @@
+Total Parts: 17
+Total Specs: 125
+
+Specs per part:
+  Adapter: 3 specs
+  Bleeder Screw: 9 specs
+  Capnut: 6 specs
+  Countersunk Screw: 4 specs
+  Knurl Pin: 4 specs
+  Pin: 5 specs
+  Pin (100631510): 5 specs
+  Pin (Grooved): 6 specs
+  Pressure Setting Screw: 3 specs
+  Pressure Setting Screw (100342310): 3 specs
+  Stud: 4 specs
+  Stud (100931690): 12 specs
+  Stud (100937080): 12 specs
+  Stud (8910100424): 12 specs
+  Stud (8910100714): 13 specs
+  Stud (8933200024): 12 specs
+  Stud (8933200064): 12 specs

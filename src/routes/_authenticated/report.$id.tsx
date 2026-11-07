@@ -1,13 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { SectionCard } from "@/components/common/SectionCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { Printer } from "lucide-react";
-
+import { Printer, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StorageImage } from "@/components/common/StorageImage";
 import { useInspectionDetail, useParts } from "@/hooks/useInspectionData";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/report/$id")({
   head: () => ({
@@ -21,10 +33,22 @@ export const Route = createFileRoute("/_authenticated/report/$id")({
   component: ReportDetailPage,
 });
 
+async function apiDeleteInspection(id: string): Promise<boolean> {
+  const res = await fetch(`http://localhost:8000/api/inspections/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+}
+
 function ReportDetailPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useInspectionDetail(id);
   const { data: parts = [] } = useParts();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (isLoading) {
     return (
@@ -45,15 +69,45 @@ function ReportDetailPage() {
 
   const partName = parts.find((p) => p.id === inspection.part_id)?.part_name ?? "—";
 
+  async function handleConfirmDelete() {
+    setIsDeleting(true);
+    try {
+      const ok = await apiDeleteInspection(id);
+      if (ok) {
+        toast.success(`Deleted ${inspection!.inspection_number}`);
+        queryClient.invalidateQueries({ queryKey: ["inspections"] });
+        navigate({ to: "/history" });
+      } else {
+        toast.error("Could not delete — backend returned an error.");
+      }
+    } catch {
+      toast.error("Delete failed. Is the backend running?");
+    } finally {
+      setIsDeleting(false);
+      setDeleteOpen(false);
+    }
+  }
+
   return (
     <AppShell
       title={inspection.inspection_number}
       subtitle={`${partName} · ${inspection.inspection_date} · Shift ${inspection.shift}`}
       actions={
-        <Button size="sm" variant="outline" onClick={() => window.print()}>
-          <Printer className="size-4" />
-          Print
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => window.print()}>
+            <Printer className="size-4" />
+            Print
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-rose-500/40 text-rose-500 hover:bg-rose-500/10"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="size-4" />
+            Delete
+          </Button>
+        </div>
       }
     >
       <div className="space-y-4">
@@ -168,6 +222,34 @@ function ReportDetailPage() {
           </SectionCard>
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-5 text-rose-500" />
+              Delete This Report?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <span className="font-semibold text-foreground">{inspection.inspection_number}</span> and all its
+              associated measurement results, surface defect data, and captured images.
+              <br /><br />
+              <span className="text-rose-500 font-medium">This action cannot be undone.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {isDeleting ? "Deleting…" : "Yes, Delete Report"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

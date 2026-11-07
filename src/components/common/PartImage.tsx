@@ -17,7 +17,10 @@ export function PartImage({
   fallbackLabel?: string;
   usePhoto?: boolean;
 }) {
-  const localSrc = usePhoto ? partPhotoUrl(partName) : partImageUrl(partName);
+  const localSrc = usePhoto
+    ? partPhotoUrl(partName, refValue)
+    : partImageUrl(partName, refValue);
+
 
   if (localSrc) {
     return (

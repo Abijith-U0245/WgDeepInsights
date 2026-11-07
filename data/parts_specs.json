@@ -1,0 +1,217 @@
+{
+  "source": "Measurement_Chart.xlsx",
+  "units": "mm",
+  "parts": [
+    {
+      "partNo": "100336950",
+      "drawingNo": "N336950",
+      "partName": "Pressure Setting Screw",
+      "family": "Screws",
+      "parameters": [
+        {"balloon":1,"parameter":"Slot Width","expected":1.1,"tolerance":0.1,"toleranceType":"plusMinus","unit":"mm","min":1,"max":1.2,"method":"Slip gauge GO / NOGO","notes":"Drawing: 1.1 ±0.1","end":null},
+        {"balloon":2,"parameter":"Total Length","expected":18.5,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":18.3,"max":18.7,"method":"Vernier","notes":"Drawing L = 18.5","end":null},
+        {"balloon":3,"parameter":"External Thread","expected":"M6×1","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M6x1","end":null}
+      ]
+    },
+    {
+      "partNo": "100342310",
+      "drawingNo": "N342310",
+      "partName": "Pressure Setting Screw",
+      "family": "Screws",
+      "parameters": [
+        {"balloon":1,"parameter":"Slot Width","expected":1.1,"tolerance":0.1,"toleranceType":"plusMinus","unit":"mm","min":1,"max":1.2,"method":"Slip gauge GO / NOGO","notes":"Drawing: 1.1 ±0.1","end":null},
+        {"balloon":2,"parameter":"Total Length","expected":30,"tolerance":0.3,"toleranceType":"plusMinus","unit":"mm","min":29.7,"max":30.3,"method":"Vernier","notes":"Drawing L = 30","end":null},
+        {"balloon":3,"parameter":"External Thread","expected":"M6×1","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M6x1","end":null}
+      ]
+    },
+    {
+      "partNo": "100922920",
+      "drawingNo": "M922920",
+      "partName": "Countersunk Screw",
+      "family": "Screws",
+      "parameters": [
+        {"balloon":1,"parameter":"External Thread","expected":"M4×0.7","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M4x0.7","end":null},
+        {"balloon":2,"parameter":"Total Length","expected":16,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":15.8,"max":16.2,"method":"Vernier","notes":"Drawing 16","end":null},
+        {"balloon":3,"parameter":"Head Slot Width","expected":0.9,"tolerance":0.1,"toleranceType":"plusMinus","unit":"mm","min":0.8,"max":1,"method":"Vernier","notes":"Drawing 0.9 ±0.1 (balloon 3)","end":null},
+        {"balloon":4,"parameter":"Head Outer Diameter","expected":7.32,"tolerance":0.18,"toleranceType":"plusMinus","unit":"mm","min":7.14,"max":7.5,"method":"Micrometer","notes":"Drawing Ø7.32 ±0.18","end":null}
+      ]
+    },
+    {
+      "partNo": "8913505204",
+      "drawingNo": null,
+      "partName": "Bleeder Screw",
+      "family": "Screws",
+      "parameters": [
+        {"balloon":1,"parameter":"External Thread","expected":"M7×1","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M7x1","end":null},
+        {"balloon":2,"parameter":"Step Diameter","expected":5.19,"tolerance":0.06,"toleranceType":"plusMinus","unit":"mm","min":5.13,"max":5.25,"method":"Gap gauge","notes":"Drawing Ø5.25 0/-0.12 (one-sided: Expected is mid-band)","end":null},
+        {"balloon":3,"parameter":"Outer Diameter","expected":7,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":6.8,"max":7.2,"method":"Micrometer","notes":"Drawing Ø7 (±0.2 from limits)","end":null},
+        {"balloon":4,"parameter":"Diameter","expected":5,"tolerance":0.1,"toleranceType":"plusMinus","unit":"mm","min":4.9,"max":5.1,"method":"Vernier","notes":"Drawing Ø5 (±0.1 from limits)","end":null},
+        {"balloon":5,"parameter":"Cross Hole Diameter","expected":1.5,"tolerance":0.1,"toleranceType":"plusMinus","unit":"mm","min":1.4,"max":1.6,"method":"Plug gauge GO / NOGO (PPG)","notes":"Drawing Ø1.5 ±0.1","end":null},
+        {"balloon":6,"parameter":"Inner Diameter (Ø3 bore)","expected":3.125,"tolerance":0.125,"toleranceType":"plusMinus","unit":"mm","min":3,"max":3.25,"method":"Plug gauge GO / NOGO (PPG)","notes":"Drawing Ø3 +0.25/0 (one-sided: Expected is mid-band)","end":null},
+        {"balloon":7,"parameter":"Inner Diameter (Ø2 bore)","expected":2.125,"tolerance":0.125,"toleranceType":"plusMinus","unit":"mm","min":2,"max":2.25,"method":"Plug gauge GO / NOGO (PPG)","notes":"Drawing Ø2 +0.25/0 (one-sided: Expected is mid-band)","end":null},
+        {"balloon":8,"parameter":"Across Flat (Hex 8)","expected":7.935,"tolerance":0.065,"toleranceType":"plusMinus","unit":"mm","min":7.87,"max":8,"method":"Vernier","notes":"Drawing Hex 8","end":null},
+        {"balloon":"—","parameter":"Depth","expected":26.95,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":26.75,"max":27.15,"method":"Flat plug gauge (FPG)","notes":"CHECK: no balloon in Excel; drawing shows 27 +1.5/0 – confirm feature","end":null}
+      ]
+    },
+    {
+      "partNo": "100631510",
+      "drawingNo": "M631510",
+      "partName": "Pin",
+      "family": "Pins",
+      "parameters": [
+        {"balloon":1,"parameter":"Outer Diameter","expected":11.979,"tolerance":0.021,"toleranceType":"plusMinus","unit":"mm","min":11.958,"max":12,"method":"Plain ring gauge GO / NOGO","notes":"Drawing ØA 11.979 ±0.021","end":null},
+        {"balloon":2,"parameter":"Cross Hole Diameter","expected":3.2,"tolerance":0.1,"toleranceType":"plusMinus","unit":"mm","min":3.1,"max":3.3,"method":"Plain plug gauge GO / NOGO","notes":"Drawing ØD 3.2 through, 2 holes","end":null},
+        {"balloon":3,"parameter":"Length-2 (Hole to End, B/S)","expected":3.2,"tolerance":0.1,"toleranceType":"plusMinus","unit":"mm","min":3.1,"max":3.3,"method":"Vernier","notes":"Drawing B = 3.2","end":null},
+        {"balloon":4,"parameter":"Total Length","expected":87.6,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":87.4,"max":87.8,"method":"Vernier","notes":"Drawing L 87.6 ±0.2","end":null},
+        {"balloon":5,"parameter":"Length-1 (Hole to Hole)","expected":81.2,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":81,"max":81.4,"method":"Vernier","notes":"Drawing C 81.2 ±0.2","end":null}
+      ]
+    },
+    {
+      "partNo": "4611000994",
+      "drawingNo": null,
+      "partName": "Pin (Grooved)",
+      "family": "Pins",
+      "parameters": [
+        {"balloon":1,"parameter":"Groove Diameter","expected":9.955,"tolerance":0.045,"toleranceType":"plusMinus","unit":"mm","min":9.91,"max":10,"method":"Gap gauge","notes":"Drawing Ø9.955 ±0.045 (2 grooves); runout 0.1 wrt datum A","end":null},
+        {"balloon":2,"parameter":"Length-1 (B/S)","expected":16.3,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":16.1,"max":16.5,"method":"Vernier","notes":"Drawing 16.3 ±0.2","end":null},
+        {"balloon":3,"parameter":"Length-2","expected":28,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":27.8,"max":28.2,"method":"Gap gauge / Vernier","notes":"Drawing 28 ±0.2","end":null},
+        {"balloon":4,"parameter":"Groove Width","expected":1.28,"tolerance":0.03,"toleranceType":"plusMinus","unit":"mm","min":1.25,"max":1.31,"method":"Slip gauge GO / NOGO","notes":"Drawing 2x 1.28 ±0.03","end":null},
+        {"balloon":5,"parameter":"Outer Diameter","expected":11.979,"tolerance":0.021,"toleranceType":"plusMinus","unit":"mm","min":11.958,"max":12,"method":"Plain ring gauge GO / NOGO","notes":"Drawing Ø11.979 ±0.021","end":null},
+        {"balloon":6,"parameter":"Total Length","expected":60.65,"tolerance":0.25,"toleranceType":"plusMinus","unit":"mm","min":60.4,"max":60.9,"method":"Vernier","notes":"Drawing 60.65 ±0.25","end":null}
+      ]
+    },
+    {
+      "partNo": "8920100094",
+      "drawingNo": "M274070",
+      "partName": "Knurl Pin",
+      "family": "Pins",
+      "parameters": [
+        {"balloon":1,"parameter":"Step Diameter","expected":5.85,"tolerance":0.05,"toleranceType":"plusMinus","unit":"mm","min":5.8,"max":5.9,"method":"Micrometer","notes":"Drawing Ø5.85 ±0.05","end":null},
+        {"balloon":2,"parameter":"Total Length","expected":24,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":23.8,"max":24.2,"method":"Vernier","notes":"Drawing 24","end":null},
+        {"balloon":3,"parameter":"Outer Diameter (Knurl)","expected":6.17,"tolerance":0.05,"toleranceType":"plusMinus","unit":"mm","min":6.12,"max":6.22,"method":"Plain ring gauge GO / NOGO","notes":"Drawing Ø6.17 ±0.05","end":null},
+        {"balloon":4,"parameter":"Knurl Length","expected":12,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":11.8,"max":12.2,"method":"Vernier","notes":"Drawing 12","end":null}
+      ]
+    },
+    {
+      "partNo": "100931690",
+      "drawingNo": "M931690",
+      "partName": "Stud",
+      "family": "Studs",
+      "parameters": [
+        {"balloon":3,"parameter":"External Thread 1 (Metal End)","expected":"M12×1.5","tolerance":"IS2186","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M12x1.5 (metal end)","end":"Metal End"},
+        {"balloon":3,"parameter":"Pitch Dia 1 (Metal End)","expected":11.0615,"tolerance":0.0355,"toleranceType":"plusMinus","unit":"mm","min":11.026,"max":11.097,"method":"Pitch micrometer","notes":null,"end":"Metal End"},
+        {"balloon":3,"parameter":"Major Dia 1 (Metal End)","expected":11.925,"tolerance":0.075,"toleranceType":"plusMinus","unit":"mm","min":11.85,"max":12,"method":"Micrometer","notes":null,"end":"Metal End"},
+        {"balloon":3,"parameter":"Minor Dia 1 (Metal End)","expected":10.141,"tolerance":0.056,"toleranceType":"plusMinus","unit":"mm","min":10.085,"max":10.197,"method":"Profile","notes":null,"end":"Metal End"},
+        {"balloon":1,"parameter":"External Thread 2 (Nut End)","expected":"M12×1.5","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M12x1.5 (nut end)","end":"Nut End"},
+        {"balloon":1,"parameter":"Pitch Dia 2 (Nut End)","expected":10.956,"tolerance":0.07,"toleranceType":"plusMinus","unit":"mm","min":10.886,"max":11.026,"method":"Pitch micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Major Dia 2 (Nut End)","expected":11.882,"tolerance":0.118,"toleranceType":"plusMinus","unit":"mm","min":11.764,"max":12,"method":"Micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Minor Dia 2 (Nut End)","expected":10.169,"tolerance":0.207,"toleranceType":"plusMinus","unit":"mm","min":9.962,"max":10.376,"method":"Profile","notes":null,"end":"Nut End"},
+        {"balloon":4,"parameter":"Thread Length 1 (Metal End)","expected":18.5,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":18,"max":19,"method":"Vernier","notes":null,"end":"Metal End"},
+        {"balloon":5,"parameter":"Thread Length 2 (Nut End)","expected":26.5,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":26,"max":27,"method":"Vernier","notes":null,"end":"Nut End"},
+        {"balloon":6,"parameter":"Shank Length","expected":1.75,"tolerance":0.75,"toleranceType":"plusMinus","unit":"mm","min":1,"max":2.5,"method":"Vernier","notes":null,"end":null},
+        {"balloon":2,"parameter":"Shank Diameter","expected":11.925,"tolerance":0.075,"toleranceType":"plusMinus","unit":"mm","min":11.85,"max":12,"method":"Micrometer","notes":null,"end":null}
+      ]
+    },
+    {
+      "partNo": "8910100424",
+      "drawingNo": "M930530",
+      "partName": "Stud",
+      "family": "Studs",
+      "parameters": [
+        {"balloon":3,"parameter":"External Thread 1 (Metal End)","expected":"M8×1.25","tolerance":"IS2186","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M8x1.25 (metal end)","end":"Metal End"},
+        {"balloon":3,"parameter":"Pitch Dia 1 (Metal End)","expected":7.2235,"tolerance":0.0355,"toleranceType":"plusMinus","unit":"mm","min":7.188,"max":7.259,"method":"Pitch micrometer","notes":null,"end":"Metal End"},
+        {"balloon":3,"parameter":"Major Dia 1 (Metal End)","expected":7.934,"tolerance":0.066,"toleranceType":"plusMinus","unit":"mm","min":7.868,"max":8,"method":"Micrometer","notes":null,"end":"Metal End"},
+        {"balloon":3,"parameter":"Minor Dia 1 (Metal End)","expected":6.447,"tolerance":0.056,"toleranceType":"plusMinus","unit":"mm","min":6.391,"max":6.503,"method":"Profile","notes":null,"end":"Metal End"},
+        {"balloon":1,"parameter":"External Thread 2 (Nut End)","expected":"M8×1.25","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M8x1.25 (nut end)","end":"Nut End"},
+        {"balloon":1,"parameter":"Pitch Dia 2 (Nut End)","expected":7.129,"tolerance":0.059,"toleranceType":"plusMinus","unit":"mm","min":7.07,"max":7.188,"method":"Pitch micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Major Dia 2 (Nut End)","expected":7.894,"tolerance":0.106,"toleranceType":"plusMinus","unit":"mm","min":7.788,"max":8,"method":"Micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Minor Dia 2 (Nut End)","expected":6.4735,"tolerance":0.1735,"toleranceType":"plusMinus","unit":"mm","min":6.3,"max":6.647,"method":"Profile","notes":null,"end":"Nut End"},
+        {"balloon":4,"parameter":"Thread Length 1 (Metal End)","expected":16,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":15.5,"max":16.5,"method":"Vernier","notes":null,"end":"Metal End"},
+        {"balloon":5,"parameter":"Thread Length 2 (Nut End)","expected":21.5,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":21,"max":22,"method":"Vernier","notes":null,"end":"Nut End"},
+        {"balloon":6,"parameter":"Shank Length","expected":1.75,"tolerance":0.75,"toleranceType":"plusMinus","unit":"mm","min":1,"max":2.5,"method":"Vernier","notes":null,"end":null},
+        {"balloon":2,"parameter":"Shank Diameter","expected":7.925,"tolerance":0.075,"toleranceType":"plusMinus","unit":"mm","min":7.85,"max":8,"method":"Micrometer","notes":null,"end":null}
+      ]
+    },
+    {
+      "partNo": "100937080",
+      "drawingNo": "M937080",
+      "partName": "Stud",
+      "family": "Studs",
+      "parameters": [
+        {"balloon":1,"parameter":"External Thread 1 (Nut End)","expected":"5/16\"-18 UNC","tolerance":"2A","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO","notes":"Excel lists GO check only for thread 1; drawing: THREAD TOL. per ASME B1.1-1989","end":"Nut End"},
+        {"balloon":1,"parameter":"Pitch Dia 1 (Nut End)","expected":6.93928,"tolerance":0.0508,"toleranceType":"plusMinus","unit":"mm","min":6.88848,"max":6.99008,"method":"Pitch micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Major Dia 1 (Nut End)","expected":7.79653,"tolerance":0.11049,"toleranceType":"plusMinus","unit":"mm","min":7.68604,"max":7.90702,"method":"Micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Minor Dia 1 (Nut End)","expected":6.17474,"tolerance":"max","toleranceType":"maxOnly","unit":"mm","min":null,"max":6.17474,"method":"Profile","notes":"Maximum limit only","end":"Nut End"},
+        {"balloon":3,"parameter":"External Thread 2 (Metal End)","expected":"5/16\"-18 UNC","tolerance":"2A","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: 5/16\"-18 UNC 2A","end":"Metal End"},
+        {"balloon":3,"parameter":"Pitch Dia 2 (Metal End)","expected":6.93928,"tolerance":0.0508,"toleranceType":"plusMinus","unit":"mm","min":6.88848,"max":6.99008,"method":"Pitch micrometer","notes":null,"end":"Metal End"},
+        {"balloon":3,"parameter":"Major Dia 2 (Metal End)","expected":7.79653,"tolerance":0.11049,"toleranceType":"plusMinus","unit":"mm","min":7.68604,"max":7.90702,"method":"Micrometer","notes":null,"end":"Metal End"},
+        {"balloon":3,"parameter":"Minor Dia 2 (Metal End)","expected":6.17474,"tolerance":"max","toleranceType":"maxOnly","unit":"mm","min":null,"max":6.17474,"method":"Profile","notes":"Maximum limit only","end":"Metal End"},
+        {"balloon":5,"parameter":"Thread Length 1 (Nut End)","expected":19.3,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":18.8,"max":19.8,"method":"Vernier","notes":"Drawing 19.3 (±0.5 from limits)","end":"Nut End"},
+        {"balloon":2,"parameter":"Thread Length 2 (Metal End)","expected":11.6,"tolerance":0.8,"toleranceType":"plusMinus","unit":"mm","min":10.8,"max":12.4,"method":"Vernier","notes":"Drawing 11.6 ±0.8","end":"Metal End"},
+        {"balloon":4,"parameter":"Total Length","expected":38.1,"tolerance":0.8,"toleranceType":"plusMinus","unit":"mm","min":37.3,"max":38.9,"method":"Vernier","notes":"Drawing 38.1 ±0.8","end":null},
+        {"balloon":6,"parameter":"Shank Diameter","expected":7.9,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":7.7,"max":8.1,"method":"Micrometer","notes":"Drawing Ø7.9 (±0.2 from limits)","end":null}
+      ]
+    },
+    {
+      "partNo": "8910100714",
+      "drawingNo": null,
+      "partName": "Stud",
+      "family": "Studs",
+      "parameters": [
+        {"balloon":6,"parameter":"External Thread 1 (Metal End)","expected":"M8×1.25","tolerance":"IS2186","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M8x1.25 (metal end)","end":"Metal End"},
+        {"balloon":6,"parameter":"Pitch Dia 1 (Metal End)","expected":7.2235,"tolerance":0.0355,"toleranceType":"plusMinus","unit":"mm","min":7.188,"max":7.259,"method":"Pitch micrometer","notes":null,"end":"Metal End"},
+        {"balloon":6,"parameter":"Major Dia 1 (Metal End)","expected":7.934,"tolerance":0.066,"toleranceType":"plusMinus","unit":"mm","min":7.868,"max":8,"method":"Micrometer","notes":null,"end":"Metal End"},
+        {"balloon":6,"parameter":"Minor Dia 1 (Metal End)","expected":6.447,"tolerance":0.056,"toleranceType":"plusMinus","unit":"mm","min":6.391,"max":6.503,"method":"Profile","notes":null,"end":"Metal End"},
+        {"balloon":1,"parameter":"External Thread 2 (Nut End)","expected":"M8×1.25","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M8x1.25 (nut end)","end":"Nut End"},
+        {"balloon":1,"parameter":"Pitch Dia 2 (Nut End)","expected":7.129,"tolerance":0.059,"toleranceType":"plusMinus","unit":"mm","min":7.07,"max":7.188,"method":"Pitch micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Major Dia 2 (Nut End)","expected":7.894,"tolerance":0.106,"toleranceType":"plusMinus","unit":"mm","min":7.788,"max":8,"method":"Micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Minor Dia 2 (Nut End)","expected":6.4735,"tolerance":0.1735,"toleranceType":"plusMinus","unit":"mm","min":6.3,"max":6.647,"method":"Profile","notes":null,"end":"Nut End"},
+        {"balloon":5,"parameter":"Thread Length 1 (Metal End)","expected":16,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":15.5,"max":16.5,"method":"Vernier","notes":"Drawing 16 ±0.5","end":"Metal End"},
+        {"balloon":3,"parameter":"Thread Length 2 (Nut End)","expected":28,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":27.5,"max":28.5,"method":"Vernier","notes":"Drawing 28 ±0.5","end":"Nut End"},
+        {"balloon":4,"parameter":"Shank Length","expected":1.75,"tolerance":0.75,"toleranceType":"plusMinus","unit":"mm","min":1,"max":2.5,"method":"Vernier","notes":"Drawing 1.75 ±0.75","end":null},
+        {"balloon":7,"parameter":"Shank Diameter","expected":7.925,"tolerance":0.075,"toleranceType":"plusMinus","unit":"mm","min":7.85,"max":8,"method":"Micrometer","notes":"Drawing Ø7.925 ±0.075","end":null},
+        {"balloon":2,"parameter":"Total Length","expected":44,"tolerance":0.3,"toleranceType":"plusMinus","unit":"mm","min":43.7,"max":44.3,"method":"Vernier","notes":"Drawing (44) – shown as reference; Excel limit 43.70/44.30","end":null}
+      ]
+    },
+    {
+      "partNo": "8933200024",
+      "drawingNo": null,
+      "partName": "Stud",
+      "family": "Studs",
+      "parameters": [
+        {"balloon":5,"parameter":"External Thread 1 (Metal End)","expected":"M8×1.25","tolerance":"IS2186","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M8x1.25 (metal end)","end":"Metal End"},
+        {"balloon":5,"parameter":"Pitch Dia 1 (Metal End)","expected":7.2235,"tolerance":0.0355,"toleranceType":"plusMinus","unit":"mm","min":7.188,"max":7.259,"method":"Pitch micrometer","notes":null,"end":"Metal End"},
+        {"balloon":5,"parameter":"Major Dia 1 (Metal End)","expected":7.934,"tolerance":0.066,"toleranceType":"plusMinus","unit":"mm","min":7.868,"max":8,"method":"Micrometer","notes":null,"end":"Metal End"},
+        {"balloon":5,"parameter":"Minor Dia 1 (Metal End)","expected":6.447,"tolerance":0.056,"toleranceType":"plusMinus","unit":"mm","min":6.391,"max":6.503,"method":"Profile","notes":null,"end":"Metal End"},
+        {"balloon":1,"parameter":"External Thread 2 (Nut End)","expected":"M8×1.25","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M8x1.25 (nut end)","end":"Nut End"},
+        {"balloon":1,"parameter":"Pitch Dia 2 (Nut End)","expected":7.129,"tolerance":0.059,"toleranceType":"plusMinus","unit":"mm","min":7.07,"max":7.188,"method":"Pitch micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Major Dia 2 (Nut End)","expected":7.894,"tolerance":0.106,"toleranceType":"plusMinus","unit":"mm","min":7.788,"max":8,"method":"Micrometer","notes":null,"end":"Nut End"},
+        {"balloon":1,"parameter":"Minor Dia 2 (Nut End)","expected":6.4735,"tolerance":0.1735,"toleranceType":"plusMinus","unit":"mm","min":6.3,"max":6.647,"method":"Profile","notes":null,"end":"Nut End"},
+        {"balloon":4,"parameter":"Thread Length 1 (Metal End)","expected":16,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":15.5,"max":16.5,"method":"Vernier","notes":"Drawing 16 ±0.5","end":"Metal End"},
+        {"balloon":2,"parameter":"Thread Length 2 (Nut End)","expected":21.5,"tolerance":0.5,"toleranceType":"plusMinus","unit":"mm","min":21,"max":22,"method":"Vernier","notes":"Drawing 21.5 ±0.5","end":"Nut End"},
+        {"balloon":3,"parameter":"Shank Length","expected":1.75,"tolerance":0.75,"toleranceType":"plusMinus","unit":"mm","min":1,"max":2.5,"method":"Vernier","notes":"Drawing 1.75 ±0.75","end":null},
+        {"balloon":6,"parameter":"Shank Diameter","expected":7.925,"tolerance":0.075,"toleranceType":"plusMinus","unit":"mm","min":7.85,"max":8,"method":"Micrometer","notes":"Drawing Ø7.925 ±0.075","end":null}
+      ]
+    },
+    {
+      "partNo": "8933200064",
+      "drawingNo": "M938960",
+      "partName": "Stud",
+      "family": "Studs",
+      "parameters": [
+        {"balloon":1,"parameter":"External Thread 1 (Metal End)","expected":"M12×1.5","tolerance":"4h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M12x1.5 CLASS 4H (Excel: 4h)","end":"Metal End"},
+        {"balloon":1,"parameter":"Pitch Dia 1 (Metal End)","expected":10.981,"tolerance":0.045,"toleranceType":"plusMinus","unit":"mm","min":10.936,"max":11.026,"method":"Pitch micrometer","notes":null,"end":"Metal End"},
+        {"balloon":1,"parameter":"Major Dia 1 (Metal End)","expected":11.925,"tolerance":0.075,"toleranceType":"plusMinus","unit":"mm","min":11.85,"max":12,"method":"Micrometer","notes":null,"end":"Metal End"},
+        {"balloon":1,"parameter":"Minor Dia 1 (Metal End)","expected":10.247,"tolerance":0.097,"toleranceType":"plusMinus","unit":"mm","min":10.15,"max":10.344,"method":"Profile","notes":null,"end":"Metal End"},
+        {"balloon":5,"parameter":"External Thread 2 (Nut End)","expected":"M12×1.75","tolerance":"6h","toleranceType":"classText","unit":null,"min":null,"max":null,"method":"Thread ring gauge GO / NOGO","notes":"Drawing: M12x1.75 (nut end)","end":"Nut End"},
+        {"balloon":5,"parameter":"Pitch Dia 2 (Nut End)","expected":10.788,"tolerance":0.075,"toleranceType":"plusMinus","unit":"mm","min":10.713,"max":10.863,"method":"Pitch micrometer","notes":null,"end":"Nut End"},
+        {"balloon":5,"parameter":"Major Dia 2 (Nut End)","expected":11.8675,"tolerance":0.1325,"toleranceType":"plusMinus","unit":"mm","min":11.735,"max":12,"method":"Micrometer","notes":null,"end":"Nut End"},
+        {"balloon":5,"parameter":"Minor Dia 2 (Nut End)","expected":9.87,"tolerance":0.235,"toleranceType":"plusMinus","unit":"mm","min":9.635,"max":10.105,"method":"Profile","notes":null,"end":"Nut End"},
+        {"balloon":2,"parameter":"Thread Length 1 (Metal End)","expected":18,"tolerance":0.8,"toleranceType":"plusMinus","unit":"mm","min":17.2,"max":18.8,"method":"Vernier","notes":"Drawing 18 ±0.8","end":"Metal End"},
+        {"balloon":3,"parameter":"Thread Length 2 (Total, Nut Side)","expected":35,"tolerance":0.8,"toleranceType":"plusMinus","unit":"mm","min":34.2,"max":35.8,"method":"Vernier","notes":"Drawing 35 ±0.8 (overall length)","end":null},
+        {"balloon":4,"parameter":"Thread Length 3 (Nut End)","expected":30,"tolerance":0.8,"toleranceType":"plusMinus","unit":"mm","min":29.2,"max":30.8,"method":"Vernier","notes":"Drawing 30 ±0.8","end":"Nut End"},
+        {"balloon":6,"parameter":"Shank Diameter","expected":12,"tolerance":0.2,"toleranceType":"plusMinus","unit":"mm","min":11.8,"max":12.2,"method":"Micrometer","notes":"Drawing Ø12 (±0.2 from limits)","end":null}
+      ]
+    }
+  ]
+}

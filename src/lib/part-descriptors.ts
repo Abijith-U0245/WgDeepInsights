@@ -5,14 +5,28 @@
  */
 
 import capnutPhoto from "@/assets/parts/capnut_photo.jpg";
-import studPhoto from "@/assets/parts/stud_photo.jpg";
 import adapterPhoto from "@/assets/parts/adapter_photo.jpg";
-import pinPhoto from "@/assets/parts/pin_photo.jpg";
+import placeholderImg from "@/assets/parts/placeholder.png";
+
+// AI-generated part images for the 13 new parts
+import img100336950 from "@/assets/parts/Part_100336950.jpg";
+import img100342310 from "@/assets/parts/Part_100342310.jpg";
+import img100922920 from "@/assets/parts/Part_100922920.jpg";
+import img8913505204 from "@/assets/parts/Part_8913505204.jpg";
+import img4611000994 from "@/assets/parts/Part_4611000994.jpg";
+import img8920100094 from "@/assets/parts/Part_8920100094.jpg";
+import img100931690 from "@/assets/parts/Part_100931690.jpg";
+import img8910100424 from "@/assets/parts/Part_8910100424.jpg";
+import img8910100714 from "@/assets/parts/Part_8910100714.jpg";
+import img8933200024 from "@/assets/parts/Part_8933200024.jpg";
+import img8933200064 from "@/assets/parts/Part_8933200064.jpg";
+import img100631510 from "@/assets/parts/Part_100631510.jpg";
+import img8910100554 from "@/assets/parts/Part_8910100554.jpg";
+import img100631490 from "@/assets/parts/Part_100631490.png";
 
 import capnutDrawing from "@/assets/parts/capnut.jpg";
-import studDrawing from "@/assets/parts/stud.jpg";
 import adapterDrawing from "@/assets/parts/adapter.jpg";
-import pinDrawing from "@/assets/parts/pin.jpg";
+
 
 export interface PartSpec {
   parameter: string;
@@ -82,48 +96,6 @@ export const PART_DESCRIPTORS: PartDescriptor[] = [
     tone: "blue",
   },
   {
-    key: "stud",
-    partNumber: "891 010 055 4",
-    name: "Stud Bolt",
-    tagline: "Double-ended stud — 5⁄16″-18 UNC 2A",
-    photo: studPhoto,
-    drawing: studDrawing,
-    material: "JED-051M4",
-    surfaceProtection: "JED-256-5 (A)",
-    weight: "19 g",
-    category: "Fastener / Threaded Stud",
-    description:
-      "A double-ended stud bolt with identical UNC threads on both ends and a smooth unthreaded shank in the centre. One end (metal end) presses or screws into the component body; the other (nut end) receives a securing nut. A white paint dot and drill-point mark at the metal end provide clear installation-direction identification on the shopfloor.",
-    function:
-      "Connects two mating components without a through-bolt. The fixed metal end locks into a tapped bore; the projecting nut end retains the mating assembly with a standard hex nut. Used in WABCO air-brake and valve assemblies.",
-    inspectionFocus: [
-      "Thread pitch and gauge — 5/16\"-18 UNC 2A both ends",
-      "Effective thread length: metal end 11.6 ± 0.8 mm, nut end 19.3 mm",
-      "Overall length 38.1 ± 0.8 mm",
-      "Shank diameter Ø 7.9 mm (no thread)",
-      "Paint dot and drill-point identification features present",
-      "45° lead chamfer (1 × 45°) on both ends",
-    ],
-    specs: [
-      { parameter: "Thread (both ends)", value: "5/16\"-18 UNC 2A", critical: true },
-      { parameter: "Overall Length", value: "38.1 ± 0.8 mm", critical: true },
-      { parameter: "Shank Diameter", value: "Ø 7.9 mm" },
-      { parameter: "Metal-end Length", value: "11.6 ± 0.8 mm" },
-      { parameter: "Nut-end Length", value: "19.3 mm" },
-      { parameter: "Chamfer", value: "1 × 45° (both ends)" },
-      { parameter: "Weight", value: "19 g" },
-      { parameter: "Thread Standard", value: "ASME B1.1-1989" },
-    ],
-    defectTypes: [
-      "Thread damage or wrong pitch",
-      "Under/over length",
-      "Missing paint dot or drill point",
-      "Bent shank",
-      "Coating absent or peeling",
-    ],
-    tone: "green",
-  },
-  {
     key: "adapter",
     partNumber: "932 500 208 4",
     name: "Adapter",
@@ -166,53 +138,422 @@ export const PART_DESCRIPTORS: PartDescriptor[] = [
     ],
     tone: "amber",
   },
+  // New Screws
   {
-    key: "pin",
+    key: "100336950",
+    partNumber: "100336950",
+    name: "Pressure Setting Screw",
+    tagline: "M6×1 slot-head pressure setting screw — 18.5 mm",
+    photo: img100336950,
+    drawing: img100336950,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Screws",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "Slot Width", value: "1.1 mm" },
+      { parameter: "Total Length", value: "18.5 mm" },
+      { parameter: "External Thread", value: "M6×1" }
+    ],
+    defectTypes: [],
+    tone: "amber"
+  },
+  {
+    key: "100342310",
+    partNumber: "100342310",
+    name: "Pressure Setting Screw",
+    tagline: "M6×1 slot-head pressure setting screw — 30 mm",
+    photo: img100342310,
+    drawing: img100342310,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Screws",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "Slot Width", value: "1.1 mm" },
+      { parameter: "Total Length", value: "30 mm" },
+      { parameter: "External Thread", value: "M6×1" }
+    ],
+    defectTypes: [],
+    tone: "amber"
+  },
+  {
+    key: "100922920",
+    partNumber: "100922920",
+    name: "Countersunk Screw",
+    tagline: "M4×0.7 countersunk flat-head screw — 16 mm",
+    photo: img100922920,
+    drawing: img100922920,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Screws",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "External Thread", value: "M4×0.7" },
+      { parameter: "Total Length", value: "16 mm" },
+      { parameter: "Head Slot Width", value: "0.9 mm" },
+      { parameter: "Head Outer Diameter", value: "7.32 mm" }
+    ],
+    defectTypes: [],
+    tone: "amber"
+  },
+  {
+    key: "8913505204",
+    partNumber: "8913505204",
+    name: "Bleeder Screw",
+    tagline: "M7×1 hex-head bleeder screw with cross-hole",
+    photo: img8913505204,
+    drawing: img8913505204,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Screws",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "External Thread", value: "M7×1" },
+      { parameter: "Step Diameter", value: "5.19 mm" },
+      { parameter: "Outer Diameter", value: "7 mm" },
+      { parameter: "Diameter", value: "5 mm" },
+      { parameter: "Cross Hole Diameter", value: "1.5 mm" },
+      { parameter: "Inner Diameter (Ø3 bore)", value: "3.125 mm" },
+      { parameter: "Inner Diameter (Ø2 bore)", value: "2.125 mm" },
+      { parameter: "Across Flat (Hex 8)", value: "7.935 mm" },
+      { parameter: "Depth", value: "26.95 mm" }
+    ],
+    defectTypes: [],
+    tone: "amber"
+  },
+  // New Pins
+  {
+    key: "100631490",
+    partNumber: "100631490",
+    name: "Pin",
+    tagline: "Cylindrical retention pin — Ø11.979 × 87.3 mm",
+    photo: img100631490,
+    drawing: img100631490,
+    material: "Alloy steel — zinc plated",
+    surfaceProtection: "Zinc phosphate / electro-zinc",
+    weight: "~82 g (est.)",
+    category: "Pins",
+    description: "Precision cylindrical pin with cross-drilled holes at each end for locking in WABCO brake actuator linkages. Similar in form to 100631510 but with shorter overall length.",
+    function: "Pivot and locking pin in WABCO brake valve assemblies. Cross-holes accept cotter pins to prevent axial withdrawal under dynamic loads.",
+    inspectionFocus: [
+      "Outer diameter Ø11.979 mm — no taper or ovality",
+      "Cross-hole diameter and symmetry at each end",
+      "Total length within tolerance",
+      "Surface finish — no longitudinal scratches",
+      "Zinc coating completeness",
+    ],
+    specs: [
+      { parameter: "Outer Diameter", value: "11.979 mm", critical: true },
+      { parameter: "Cross Hole Diameter", value: "3.2 mm", critical: true },
+      { parameter: "Total Length", value: "~87.3 mm" },
+      { parameter: "Coating", value: "Zinc phosphate / electro-zinc" },
+    ],
+    defectTypes: ["Bent shank", "Cross-hole off-position", "Diameter OOT", "Surface scratch", "Coating missing"],
+    tone: "rose"
+  },
+  {
+    key: "100631510",
     partNumber: "100631510",
     name: "Pin",
-    tagline: "Cross-drilled cylindrical dowel pin",
-    photo: pinPhoto,
-    drawing: pinDrawing,
+    tagline: "Cross-drilled cylindrical pin — Ø11.979 × 87.6 mm",
+    photo: img100631510,
+    drawing: img100631510,
     material: "Alloy steel — zinc plated",
     surfaceProtection: "Zinc phosphate / electro-zinc",
     weight: "~85 g (est.)",
-    category: "Retention / Locking Pin",
-    description:
-      "A precision cylindrical steel pin with cross-drilled holes at each end used for retention and locking in mechanical assemblies. The smooth cylindrical body provides an accurate sliding or press fit, while the cross-drilled holes accept a split pin, cotter pin, or roll pin to prevent axial withdrawal.",
-    function:
-      "Used as a pivot pin, clevis pin, or locking pin in WABCO brake actuator linkages and valve assemblies. The cross-drilled holes at each end allow a cotter pin or clip to retain the assembly under dynamic loading. Precise diameter ensures correct bore fit and prevents backlash.",
+    category: "Pins",
+    description: "A precision cylindrical pin with cross-drilled holes used for retention and locking in brake actuator linkages.",
+    function: "Pivot and locking pin in WABCO brake valve assemblies. Cross-holes accept cotter pins to prevent axial withdrawal.",
     inspectionFocus: [
-      "Cylindrical body diameter — no taper or ovality",
-      "Overall length within tolerance",
-      "Cross-hole position from each end — symmetry check",
-      "Cross-hole diameter and perpendicularity to pin axis",
-      "Surface finish — no longitudinal scratches or pitting",
-      "Zinc coating completeness — no bare steel exposed",
+      "Outer diameter Ø11.979 mm — no taper or ovality",
+      "Cross-hole diameter Ø3.2 mm and symmetry",
+      "Hole-to-end lengths within tolerance",
+      "Total length 87.6 ±0.2 mm",
     ],
     specs: [
-      { parameter: "Form", value: "Cylindrical — smooth shank", critical: true },
-      { parameter: "End feature", value: "Cross-drilled hole (×2 ends)", critical: true },
-      { parameter: "Body surface finish", value: "Ra ≤ 1.6 μm (est.)" },
-      { parameter: "Hole Ø", value: "TBD from master drawing" },
-      { parameter: "Coating", value: "Zinc phosphate / electro-zinc" },
+      { parameter: "Outer Diameter", value: "11.979 mm", critical: true },
+      { parameter: "Cross Hole Diameter", value: "3.2 mm", critical: true },
+      { parameter: "Length-2 (Hole to End, B/S)", value: "3.2 mm" },
+      { parameter: "Total Length", value: "87.6 mm" },
+      { parameter: "Length-1 (Hole to Hole)", value: "81.2 mm" },
     ],
-    defectTypes: [
-      "Bent or bowed shank",
-      "Cross-hole off-position or misaligned",
-      "Diameter out of tolerance",
-      "Surface scratch or gouge",
-      "Missing or incomplete zinc coating",
-    ],
-    tone: "rose",
+    defectTypes: ["Bent shank", "Cross-hole off-position", "Diameter OOT", "Surface scratch", "Coating missing"],
+    tone: "rose"
   },
+  {
+    key: "4611000994",
+    partNumber: "4611000994",
+    name: "Pin (Grooved)",
+    tagline: "Grooved dowel pin — Ø12 × 60.65 mm",
+    photo: img4611000994,
+    drawing: img4611000994,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Pins",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "Groove Diameter", value: "9.955 mm" },
+      { parameter: "Length-1 (B/S)", value: "16.3 mm" },
+      { parameter: "Length-2", value: "28 mm" },
+      { parameter: "Groove Width", value: "1.28 mm" },
+      { parameter: "Outer Diameter", value: "11.979 mm" },
+      { parameter: "Total Length", value: "60.65 mm" }
+    ],
+    defectTypes: [],
+    tone: "rose"
+  },
+  {
+    key: "8920100094",
+    partNumber: "8920100094",
+    name: "Knurl Pin",
+    tagline: "Knurled retention pin — Ø6.17 × 24 mm",
+    photo: img8920100094,
+    drawing: img8920100094,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Pins",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "Step Diameter", value: "5.85 mm" },
+      { parameter: "Total Length", value: "24 mm" },
+      { parameter: "Outer Diameter (Knurl)", value: "6.17 mm" },
+      { parameter: "Knurl Length", value: "12 mm" }
+    ],
+    defectTypes: [],
+    tone: "rose"
+  },
+  // New Studs
+  {
+    key: "100931690",
+    partNumber: "100931690",
+    name: "Stud",
+    tagline: "M12×1.5 double-ended stud bolt",
+    photo: img100931690,
+    drawing: img100931690,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Studs",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "External Thread 1 (Metal End)", value: "M12×1.5" },
+      { parameter: "Pitch Dia 1 (Metal End)", value: "11.0615 mm" },
+      { parameter: "Major Dia 1 (Metal End)", value: "11.925 mm" },
+      { parameter: "Minor Dia 1 (Metal End)", value: "10.141 mm" },
+      { parameter: "External Thread 2 (Nut End)", value: "M12×1.5" },
+      { parameter: "Pitch Dia 2 (Nut End)", value: "10.956 mm" },
+      { parameter: "Major Dia 2 (Nut End)", value: "11.882 mm" },
+      { parameter: "Minor Dia 2 (Nut End)", value: "10.169 mm" },
+      { parameter: "Thread Length 1 (Metal End)", value: "18.5 mm" },
+      { parameter: "Thread Length 2 (Nut End)", value: "26.5 mm" },
+      { parameter: "Shank Length", value: "1.75 mm" },
+      { parameter: "Shank Diameter", value: "11.925 mm" }
+    ],
+    defectTypes: [],
+    tone: "blue"
+  },
+  {
+    key: "8910100424",
+    partNumber: "8910100424",
+    name: "Stud",
+    tagline: "M8×1.25 double-ended stud bolt",
+    photo: img8910100424,
+    drawing: img8910100424,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Studs",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "External Thread 1 (Metal End)", value: "M8×1.25" },
+      { parameter: "Pitch Dia 1 (Metal End)", value: "7.2235 mm" },
+      { parameter: "Major Dia 1 (Metal End)", value: "7.934 mm" },
+      { parameter: "Minor Dia 1 (Metal End)", value: "6.447 mm" },
+      { parameter: "External Thread 2 (Nut End)", value: "M8×1.25" },
+      { parameter: "Pitch Dia 2 (Nut End)", value: "7.129 mm" },
+      { parameter: "Major Dia 2 (Nut End)", value: "7.894 mm" },
+      { parameter: "Minor Dia 2 (Nut End)", value: "6.4735 mm" },
+      { parameter: "Thread Length 1 (Metal End)", value: "16 mm" },
+      { parameter: "Thread Length 2 (Nut End)", value: "21.5 mm" },
+      { parameter: "Shank Length", value: "1.75 mm" },
+      { parameter: "Shank Diameter", value: "7.925 mm" }
+    ],
+    defectTypes: [],
+    tone: "blue"
+  },
+  {
+    key: "8910100714",
+    partNumber: "8910100714",
+    name: "Stud",
+    tagline: "M8×1.25 stud bolt — 44 mm",
+    photo: img8910100714,
+    drawing: img8910100714,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Studs",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "External Thread 1 (Metal End)", value: "M8×1.25" },
+      { parameter: "Pitch Dia 1 (Metal End)", value: "7.2235 mm" },
+      { parameter: "Major Dia 1 (Metal End)", value: "7.934 mm" },
+      { parameter: "Minor Dia 1 (Metal End)", value: "6.447 mm" },
+      { parameter: "External Thread 2 (Nut End)", value: "M8×1.25" },
+      { parameter: "Pitch Dia 2 (Nut End)", value: "7.129 mm" },
+      { parameter: "Major Dia 2 (Nut End)", value: "7.894 mm" },
+      { parameter: "Minor Dia 2 (Nut End)", value: "6.4735 mm" },
+      { parameter: "Thread Length 1 (Metal End)", value: "16 mm" },
+      { parameter: "Thread Length 2 (Nut End)", value: "28 mm" },
+      { parameter: "Shank Length", value: "1.75 mm" },
+      { parameter: "Shank Diameter", value: "7.925 mm" },
+      { parameter: "Total Length", value: "44 mm" }
+    ],
+    defectTypes: [],
+    tone: "blue"
+  },
+  {
+    key: "8933200024",
+    partNumber: "8933200024",
+    name: "Stud",
+    tagline: "M8×1.25 double-ended stud bolt",
+    photo: img8933200024,
+    drawing: img8933200024,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Studs",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "External Thread 1 (Metal End)", value: "M8×1.25" },
+      { parameter: "Pitch Dia 1 (Metal End)", value: "7.2235 mm" },
+      { parameter: "Major Dia 1 (Metal End)", value: "7.934 mm" },
+      { parameter: "Minor Dia 1 (Metal End)", value: "6.447 mm" },
+      { parameter: "External Thread 2 (Nut End)", value: "M8×1.25" },
+      { parameter: "Pitch Dia 2 (Nut End)", value: "7.129 mm" },
+      { parameter: "Major Dia 2 (Nut End)", value: "7.894 mm" },
+      { parameter: "Minor Dia 2 (Nut End)", value: "6.4735 mm" },
+      { parameter: "Thread Length 1 (Metal End)", value: "16 mm" },
+      { parameter: "Thread Length 2 (Nut End)", value: "21.5 mm" },
+      { parameter: "Shank Length", value: "1.75 mm" },
+      { parameter: "Shank Diameter", value: "7.925 mm" }
+    ],
+    defectTypes: [],
+    tone: "blue"
+  },
+  {
+    key: "8933200064",
+    partNumber: "8933200064",
+    name: "Stud",
+    tagline: "M12×1.5 / M12×1.75 dual-thread stud bolt",
+    photo: img8933200064,
+    drawing: img8933200064,
+    material: "",
+    surfaceProtection: "",
+    weight: "",
+    category: "Studs",
+    description: "",
+    function: "",
+    inspectionFocus: [],
+    specs: [
+      { parameter: "External Thread 1 (Metal End)", value: "M12×1.5" },
+      { parameter: "Pitch Dia 1 (Metal End)", value: "10.981 mm" },
+      { parameter: "Major Dia 1 (Metal End)", value: "11.925 mm" },
+      { parameter: "Minor Dia 1 (Metal End)", value: "10.247 mm" },
+      { parameter: "External Thread 2 (Nut End)", value: "M12×1.75" },
+      { parameter: "Pitch Dia 2 (Nut End)", value: "10.788 mm" },
+      { parameter: "Major Dia 2 (Nut End)", value: "11.8675 mm" },
+      { parameter: "Minor Dia 2 (Nut End)", value: "9.87 mm" },
+      { parameter: "Thread Length 1 (Metal End)", value: "18 mm" },
+      { parameter: "Thread Length 2 (Total, Nut Side)", value: "35 mm" },
+      { parameter: "Thread Length 3 (Nut End)", value: "30 mm" },
+      { parameter: "Shank Diameter", value: "12 mm" }
+    ],
+    defectTypes: [],
+    tone: "blue"
+  },
+  {
+    key: "100937080",
+    partNumber: "100937080",
+    name: "Stud",
+    tagline: "5/16\u2033-18 UNC / M8 dual-thread stud bolt — 38.1 mm",
+    photo: img8910100554,
+    drawing: img8910100554,
+    material: "JED-051M4",
+    surfaceProtection: "JED-256-5 (A)",
+    weight: "~19 g",
+    category: "Studs",
+    description: "Double-ended stud with 5/16\"-18 UNC on one end and M8 thread on the other. Used in mixed-thread assemblies.",
+    function: "Bridges metric and UNC threaded bores in WABCO valve body assemblies.",
+    inspectionFocus: [
+      "Thread 1 (Nut End): 5/16\"-18 UNC",
+      "Thread 2 (Metal End): 5/16\"-18 UNC internally, M8 externally",
+      "Overall length 38.1 ±0.8 mm",
+      "Shank diameter Ø7.9 mm",
+    ],
+    specs: [
+      { parameter: "External Thread 1 (Nut End)", value: "5/16\"-18 UNC", critical: true },
+      { parameter: "Pitch Dia 1 (Nut End)", value: "6.93928 mm" },
+      { parameter: "Major Dia 1 (Nut End)", value: "7.79653 mm" },
+      { parameter: "Minor Dia 1 (Nut End)", value: "6.17474 mm" },
+      { parameter: "External Thread 2 (Metal End)", value: "5/16\"-18 UNC", critical: true },
+      { parameter: "Pitch Dia 2 (Metal End)", value: "6.93928 mm" },
+      { parameter: "Major Dia 2 (Metal End)", value: "7.79653 mm" },
+      { parameter: "Minor Dia 2 (Metal End)", value: "6.17474 mm" },
+      { parameter: "Thread Length 1 (Nut End)", value: "19.3 mm" },
+      { parameter: "Thread Length 2 (Metal End)", value: "11.6 mm" },
+      { parameter: "Total Length", value: "38.1 mm" },
+      { parameter: "Shank Diameter", value: "7.9 mm" }
+    ],
+    defectTypes: ["Thread damage", "Under/over length", "Bent shank", "Coating absent"],
+    tone: "blue"
+  }
 ];
 
 const DESCRIPTOR_MAP: Record<string, PartDescriptor> = Object.fromEntries(
-  PART_DESCRIPTORS.map((d) => [d.key, d]),
+  PART_DESCRIPTORS.flatMap((d) => [
+    [d.key, d],
+    [d.partNumber, d],   // also index by part number string
+  ])
 );
 
 export function getPartDescriptor(partName: string | null | undefined): PartDescriptor | null {
   if (!partName) return null;
-  const key = partName.toLowerCase().replace(/[\s_-]/g, "");
+
+  // Handle "Name (PartNo)" format — extract the part number
+  const pnoMatch = partName.match(/\((\d+)\)\s*$/);
+  if (pnoMatch?.[1]) {
+    const byPno = DESCRIPTOR_MAP[pnoMatch[1]];
+    if (byPno) return byPno;
+  }
+
+  // Legacy slug-based lookup
+  const key = partName.toLowerCase().replace(/[\s_()-]/g, "").replace(/[^a-z0-9]/g, "");
   return DESCRIPTOR_MAP[key] ?? null;
 }

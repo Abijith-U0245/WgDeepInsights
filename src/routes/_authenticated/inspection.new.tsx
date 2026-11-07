@@ -61,8 +61,10 @@ import {
   inspectStreamUrl,
   topStreamUrl,
   sideStreamUrl,
+  rightStreamUrl,
   topCaptureUrl,
   sideCaptureUrl,
+  rightCaptureUrl,
   runFullTest,
   runBatchTest,
   processPair,
@@ -212,6 +214,7 @@ function NewInspectionPage() {
   }
   const [topSnapshots, setTopSnapshots] = useState<SnapshotItem[]>([]);
   const [sideSnapshots, setSideSnapshots] = useState<SnapshotItem[]>([]);
+  const [rightSnapshots, setRightSnapshots] = useState<SnapshotItem[]>([]);
   const [batchResult, setBatchResult] = useState<RunBatchTestResult | null>(null);
 
   // Reset results if part changes
@@ -220,70 +223,57 @@ function NewInspectionPage() {
     setSelectedRunIdx(0);
     setTopSnapshots([]);
     setSideSnapshots([]);
+    setRightSnapshots([]);
     setBatchResult(null);
   }, [partId]);
 
   async function handleCaptureSnapshot() {
     const ts = Date.now();
-    const currentPairCount = Math.max(topSnapshots.length, sideSnapshots.length);
+    const currentPairCount = Math.max(topSnapshots.length, sideSnapshots.length, rightSnapshots.length);
     const nextPairIndex = currentPairCount + 1;
 
-    const canCaptureTop = topSnapshots.length < 5;
-    const canCaptureSide = sideSnapshots.length < 5;
+    const canCaptureTop   = topSnapshots.length < 5;
+    const canCaptureSide  = sideSnapshots.length < 5;
+    const canCaptureRight = rightSnapshots.length < 5;
 
-    if (!canCaptureTop && !canCaptureSide) {
-      toast.error("Maximum limit of 5 snapshot pairs (10 images total) reached. Delete an image to capture more.");
+    if (!canCaptureTop && !canCaptureSide && !canCaptureRight) {
+      toast.error("Maximum limit of 5 snapshots per camera reached. Delete an image to capture more.");
       return;
     }
 
     const pName = part?.part_name ?? "capnut";
 
-    // Trigger AI background pre-inference asynchronously (no delay or UI block)
+    // Trigger AI background pre-inference asynchronously
     processPair(pName, nextPairIndex).catch((err) => {
       console.warn(`Pair #${nextPairIndex} background pre-inference status:`, err);
     });
 
-    if (canCaptureTop) {
+    const captureFromUrl = async (
+      url: string,
+      setter: React.Dispatch<React.SetStateAction<SnapshotItem[]>>,
+      prefix: string
+    ) => {
       try {
-        const res = await fetch(topCaptureUrl(pName) + `?t=${ts}`);
+        const res = await fetch(url + `?t=${ts}`);
         if (res.ok) {
           const blob = await res.blob();
           const reader = new FileReader();
           reader.onloadend = () => {
             const b64 = reader.result as string;
-            setTopSnapshots((prev) => [
-              ...prev,
-              { id: `top-${ts}`, timestamp: new Date().toLocaleTimeString(), preview: b64 }
-            ]);
+            setter((prev) => [...prev, { id: `${prefix}-${ts}`, timestamp: new Date().toLocaleTimeString(), preview: b64 }]);
           };
           reader.readAsDataURL(blob);
         }
       } catch (err) {
-        console.error("Failed to capture top snapshot:", err);
+        console.error(`Failed to capture ${prefix} snapshot:`, err);
       }
-    }
+    };
 
-    if (canCaptureSide) {
-      try {
-        const res = await fetch(sideCaptureUrl(pName) + `?t=${ts}`);
-        if (res.ok) {
-          const blob = await res.blob();
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const b64 = reader.result as string;
-            setSideSnapshots((prev) => [
-              ...prev,
-              { id: `side-${ts}`, timestamp: new Date().toLocaleTimeString(), preview: b64 }
-            ]);
-          };
-          reader.readAsDataURL(blob);
-        }
-      } catch (err) {
-        console.error("Failed to capture side snapshot:", err);
-      }
-    }
+    if (canCaptureTop)   await captureFromUrl(topCaptureUrl(pName),   setTopSnapshots,   "top");
+    if (canCaptureSide)  await captureFromUrl(sideCaptureUrl(pName),  setSideSnapshots,  "side");
+    if (canCaptureRight) await captureFromUrl(rightCaptureUrl(pName), setRightSnapshots, "right");
 
-    toast.success("Part captured", { duration: 1000 });
+    toast.success("Part captured from all 3 cameras", { duration: 1000 });
   }
 
   function removeTopSnapshot(id: string) {
@@ -293,6 +283,11 @@ function NewInspectionPage() {
 
   function removeSideSnapshot(id: string) {
     setSideSnapshots((prev) => prev.filter((item) => item.id !== id));
+    toast.info("Snapshot removed", { duration: 1000 });
+  }
+
+  function removeRightSnapshot(id: string) {
+    setRightSnapshots((prev) => prev.filter((item) => item.id !== id));
     toast.info("Snapshot removed", { duration: 1000 });
   }
 
@@ -306,9 +301,15 @@ function NewInspectionPage() {
     toast.info("Side snapshots cleared", { duration: 1000 });
   }
 
+  function clearRightSnapshots() {
+    setRightSnapshots([]);
+    toast.info("Right snapshots cleared", { duration: 1000 });
+  }
+
   function clearAllSnapshots() {
     setTopSnapshots([]);
     setSideSnapshots([]);
+    setRightSnapshots([]);
     setBatchResult(null);
     toast.info("All snapshots cleared", { duration: 1000 });
   }
@@ -670,57 +671,60 @@ function NewInspectionPage() {
           <div className="space-y-5">
             {/* Section 1: Live Inspection Camera (Top full-width row) */}
             <SectionCard
-              title="Live inspection Camera"
-              subtitle="CAM 1 / Top view • CAM 2 / Side view"
+              title="Live Inspection Camera"
+              subtitle="CAM 1 / Top view • CAM 2 / Left side view • CAM 3 / Right side view"
               action={
                 <div className="flex items-center gap-3">
                   <button
                     id="btn-capture-image"
                     onClick={handleCaptureSnapshot}
-                    disabled={backendStatus === "offline" || (topSnapshots.length >= 5 && sideSnapshots.length >= 5)}
+                    disabled={backendStatus === "offline" || (topSnapshots.length >= 5 && sideSnapshots.length >= 5 && rightSnapshots.length >= 5)}
                     className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
                   >
                     <Camera className="size-4" />
-                    Capture Image (Top: {topSnapshots.length}/5, Side: {sideSnapshots.length}/5)
+                    Capture (Top: {topSnapshots.length}/5, L: {sideSnapshots.length}/5, R: {rightSnapshots.length}/5)
                   </button>
                   <button
                     id="btn-inspect-part"
                     onClick={handleInspectPart}
-                    disabled={running !== null || backendStatus === "offline" || (topSnapshots.length === 0 && sideSnapshots.length === 0)}
+                    disabled={running !== null || backendStatus === "offline" || (topSnapshots.length === 0 && sideSnapshots.length === 0 && rightSnapshots.length === 0)}
                     className="rounded-xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
                   >
                     {running === "inspect" ? <Loader2 className="size-4 animate-spin" /> : <Scan className="size-4" />}
-                    Inspect ({topSnapshots.length + sideSnapshots.length} image{topSnapshots.length + sideSnapshots.length === 1 ? "" : "s"})
+                    Inspect ({topSnapshots.length + sideSnapshots.length + rightSnapshots.length} image{topSnapshots.length + sideSnapshots.length + rightSnapshots.length === 1 ? "" : "s"})
                   </button>
                 </div>
               }
             >
-              <div className="grid gap-4 md:grid-cols-2">
+              {/* All 3 cameras — equal 3-column horizontal strip */}
+              <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: "CAM 1 / TOP VIEW", url: topStreamUrl(activePartName) },
-                  { label: "CAM 2 / SIDE VIEW", url: sideStreamUrl(activePartName) },
+                  { label: "CAM 1 / TOP VIEW",        url: topStreamUrl(activePartName),   accent: "border-emerald-500/40" },
+                  { label: "CAM 2 / LEFT SIDE VIEW",  url: sideStreamUrl(activePartName),  accent: "border-sky-500/40" },
+                  { label: "CAM 3 / RIGHT SIDE VIEW", url: rightStreamUrl(activePartName), accent: "border-violet-500/40" },
                 ].map((camera) => (
                   <div
                     key={camera.label}
-                    className="relative h-[280px] sm:h-[320px] w-full overflow-hidden rounded-xl border border-border bg-slate-950 flex items-center justify-center shadow-inner"
+                    className={`relative h-[300px] w-full overflow-hidden rounded-xl border-2 ${camera.accent} bg-slate-950 flex items-center justify-center shadow-inner`}
                   >
                     {backendStatus !== "offline" ? (
                       <img
                         key={camera.url}
                         src={camera.url}
-                        alt={`${camera.label} live camera feed`}
-                        className="h-full aspect-square max-w-full object-contain bg-slate-950"
+                        alt={`${camera.label} live feed`}
+                        className="h-full w-full object-contain bg-slate-950"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center border border-dashed border-border bg-muted/30">
-                        <div className="text-center p-4">
-                          <Camera className="mx-auto mb-2 size-10 text-muted-foreground/40" />
-                          <p className="type-body-s text-muted-foreground">Camera feed unavailable — backend offline</p>
-                        </div>
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 border border-dashed border-border bg-muted/20 px-4">
+                        <Camera className="size-8 text-muted-foreground/30" />
+                        <p className="text-center text-xs text-muted-foreground/60">Backend offline</p>
                       </div>
                     )}
-                    <div className="absolute inset-x-3 bottom-3 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground backdrop-blur-sm">
-                      {camera.label}
+                    {/* Label pill at bottom */}
+                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-slate-950/80 py-2 backdrop-blur-sm">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        {camera.label}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -730,7 +734,7 @@ function NewInspectionPage() {
             {/* Section 2: Captured Snapshots (Middle full-width row) */}
             <SectionCard
               title="Captured Snapshots"
-              subtitle="Row 1: CAM 1 (Top) • Row 2: CAM 2 (Side)"
+              subtitle="Row 1: CAM 1 (Top) • Row 2: CAM 2 (Left Side) • Row 3: CAM 3 (Right Side)"
               action={
                 (topSnapshots.length > 0 || sideSnapshots.length > 0) && (
                   <button
@@ -791,44 +795,58 @@ function NewInspectionPage() {
                   </div>
                 </div>
 
-                {/* Row 2: CAM 2 Side View Snapshots */}
+                {/* Row 2: CAM 2 Left Side View Snapshots */}
                 <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-sm font-semibold text-foreground">CAM 2 (SIDE)</span>
+                    <span className="text-sm font-semibold text-foreground">CAM 2 (LEFT SIDE)</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">
-                        {sideSnapshots.length} / 5 images
-                      </span>
+                      <span className="text-xs text-muted-foreground">{sideSnapshots.length} / 5 images</span>
                       {sideSnapshots.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={clearSideSnapshots}
-                          className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-500 transition-colors hover:bg-rose-500/20"
-                        >
-                          <Trash2 className="size-3" />
-                          Clear Side
+                        <button type="button" onClick={clearSideSnapshots} className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-500 transition-colors hover:bg-rose-500/20">
+                          <Trash2 className="size-3" /> Clear Left
                         </button>
                       )}
                     </div>
                   </div>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {sideSnapshots.length === 0 ? (
-                      <div className="flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-                        No side-view snapshots captured yet
-                      </div>
+                      <div className="flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">No left-side snapshots captured yet</div>
                     ) : (
                       sideSnapshots.map((item, index) => (
                         <div key={item.id} className="group relative aspect-square h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-black">
-                          <img src={item.preview} alt={`Side snapshot ${index + 1}`} className="size-full object-contain bg-black" />
-                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">
-                            #{index + 1}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeSideSnapshot(item.id)}
-                            className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow transition-opacity hover:bg-rose-700"
-                            aria-label="Remove side snapshot"
-                          >
+                          <img src={item.preview} alt={`Left side snapshot ${index + 1}`} className="size-full object-contain bg-black" />
+                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">#{index + 1}</div>
+                          <button type="button" onClick={() => removeSideSnapshot(item.id)} className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow transition-opacity hover:bg-rose-700" aria-label="Remove left side snapshot">
+                            <XCircle className="size-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 3: CAM 3 Right Side View Snapshots */}
+                <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-sm font-semibold text-foreground">CAM 3 (RIGHT SIDE)</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">{rightSnapshots.length} / 5 images</span>
+                      {rightSnapshots.length > 0 && (
+                        <button type="button" onClick={clearRightSnapshots} className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-500 transition-colors hover:bg-rose-500/20">
+                          <Trash2 className="size-3" /> Clear Right
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-1">
+                    {rightSnapshots.length === 0 ? (
+                      <div className="flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">No right-side snapshots captured yet</div>
+                    ) : (
+                      rightSnapshots.map((item, index) => (
+                        <div key={item.id} className="group relative aspect-square h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-black">
+                          <img src={item.preview} alt={`Right side snapshot ${index + 1}`} className="size-full object-contain bg-black" />
+                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">#{index + 1}</div>
+                          <button type="button" onClick={() => removeRightSnapshot(item.id)} className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow transition-opacity hover:bg-rose-700" aria-label="Remove right side snapshot">
                             <XCircle className="size-3.5" />
                           </button>
                         </div>

@@ -150,6 +150,16 @@ export function sideCaptureUrl(partName: string): string {
   return `http://${host}:8000/capture/${encodeURIComponent(partName.toLowerCase())}/side`;
 }
 
+export function rightStreamUrl(partName: string): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/stream/${encodeURIComponent(partName.toLowerCase())}/right`;
+}
+
+export function rightCaptureUrl(partName: string): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `http://${host}:8000/capture/${encodeURIComponent(partName.toLowerCase())}/right`;
+}
+
 // ── Trigger calls ──────────────────────────────────────────────────────────
 
 async function pyPost<T>(path: string): Promise<T> {

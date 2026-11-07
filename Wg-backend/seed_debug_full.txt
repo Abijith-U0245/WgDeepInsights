@@ -1,0 +1,162 @@
+Using test part_id: be318c99-0c26-41b9-8161-8c276ed621ff
+100336950 | 'Slot Width'                   | exp=1.1      | tol=0.1      | unit='mm'
+100336950 | 'Total Length'                 | exp=18.5     | tol=0.2      | unit='mm'
+100336950 | 'External Thread'              | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (c92c0923-65e3-41b4-9e44-9d09ec9c3f55, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread, null, null, , Drawing: M6x1; expected: M6x1; tol class: 6h, 2026-11-02 19:11:10.987786+05:30).
+
+100342310 | 'Slot Width'                   | exp=1.1      | tol=0.1      | unit='mm'
+100342310 | 'Total Length'                 | exp=30.0     | tol=0.3      | unit='mm'
+100342310 | 'External Thread'              | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (9ca6ec71-3cb4-4f82-b2c4-bb1603f328e7, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread, null, null, , Drawing: M6x1; expected: M6x1; tol class: 6h, 2026-11-02 19:11:10.98977+05:30).
+
+100631510 | 'Outer Diameter'               | exp=11.979   | tol=0.021    | unit='mm'
+100631510 | 'Cross Hole Diameter'          | exp=3.2      | tol=0.1      | unit='mm'
+100631510 | 'Length-2 (Hole to End, B/S)'  | exp=3.2      | tol=0.1      | unit='mm'
+100631510 | 'Total Length'                 | exp=87.6     | tol=0.2      | unit='mm'
+100631510 | 'Length-1 (Hole to Hole)'      | exp=81.2     | tol=0.2      | unit='mm'
+4611000994 | 'Groove Diameter'              | exp=9.955    | tol=0.045    | unit='mm'
+4611000994 | 'Length-1 (B/S)'               | exp=16.3     | tol=0.2      | unit='mm'
+4611000994 | 'Length-2'                     | exp=28.0     | tol=0.2      | unit='mm'
+4611000994 | 'Groove Width'                 | exp=1.28     | tol=0.03     | unit='mm'
+4611000994 | 'Outer Diameter'               | exp=11.979   | tol=0.021    | unit='mm'
+4611000994 | 'Total Length'                 | exp=60.65    | tol=0.25     | unit='mm'
+100931690 | 'External Thread 1 (Metal End)' | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (14d6cbfc-e09c-4d98-9cb1-f686dc286469, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 1 (Metal End), null, null, , Drawing: M12x1.5 (metal end); expected: M12x1.5; tol class: IS21..., 2026-11-02 19:11:10.996213+05:30).
+
+100931690 | 'Pitch Dia 1 (Metal End)'      | exp=11.0615  | tol=0.0355   | unit='mm'
+100931690 | 'Major Dia 1 (Metal End)'      | exp=11.925   | tol=0.075    | unit='mm'
+100931690 | 'Minor Dia 1 (Metal End)'      | exp=10.141   | tol=0.056    | unit='mm'
+100931690 | 'External Thread 2 (Nut End)'  | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (34a6284b-5ac6-4014-809b-e0b27a8d2dbc, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 2 (Nut End), null, null, , Drawing: M12x1.5 (nut end); expected: M12x1.5; tol class: 6h, 2026-11-02 19:11:10.99859+05:30).
+
+100931690 | 'Pitch Dia 2 (Nut End)'        | exp=10.956   | tol=0.07     | unit='mm'
+100931690 | 'Major Dia 2 (Nut End)'        | exp=11.882   | tol=0.118    | unit='mm'
+100931690 | 'Minor Dia 2 (Nut End)'        | exp=10.169   | tol=0.207    | unit='mm'
+100931690 | 'Thread Length 1 (Metal End)'  | exp=18.5     | tol=0.5      | unit='mm'
+100931690 | 'Thread Length 2 (Nut End)'    | exp=26.5     | tol=0.5      | unit='mm'
+100931690 | 'Shank Length'                 | exp=1.75     | tol=0.75     | unit='mm'
+100931690 | 'Shank Diameter'               | exp=11.925   | tol=0.075    | unit='mm'
+8910100424 | 'External Thread 1 (Metal End)' | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (ed58e442-80c2-40a4-9d2b-c4e547abdefd, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 1 (Metal End), null, null, , Drawing: M8x1.25 (metal end); expected: M8x1.25; tol class: IS21..., 2026-11-02 19:11:11.002272+05:30).
+
+8910100424 | 'Pitch Dia 1 (Metal End)'      | exp=7.2235   | tol=0.0355   | unit='mm'
+8910100424 | 'Major Dia 1 (Metal End)'      | exp=7.934    | tol=0.066    | unit='mm'
+8910100424 | 'Minor Dia 1 (Metal End)'      | exp=6.447    | tol=0.056    | unit='mm'
+8910100424 | 'External Thread 2 (Nut End)'  | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (ac8d583b-8648-4c63-a205-30fdb045ca23, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 2 (Nut End), null, null, , Drawing: M8x1.25 (nut end); expected: M8x1.25; tol class: 6h, 2026-11-02 19:11:11.004102+05:30).
+
+8910100424 | 'Pitch Dia 2 (Nut End)'        | exp=7.129    | tol=0.059    | unit='mm'
+8910100424 | 'Major Dia 2 (Nut End)'        | exp=7.894    | tol=0.106    | unit='mm'
+8910100424 | 'Minor Dia 2 (Nut End)'        | exp=6.4735   | tol=0.1735   | unit='mm'
+8910100424 | 'Thread Length 1 (Metal End)'  | exp=16.0     | tol=0.5      | unit='mm'
+8910100424 | 'Thread Length 2 (Nut End)'    | exp=21.5     | tol=0.5      | unit='mm'
+8910100424 | 'Shank Length'                 | exp=1.75     | tol=0.75     | unit='mm'
+8910100424 | 'Shank Diameter'               | exp=7.925    | tol=0.075    | unit='mm'
+100937080 | 'External Thread 1 (Nut End)'  | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (3dd9622b-b70b-429a-8fe5-d2799b27963a, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 1 (Nut End), null, null, , Excel lists GO check only for thread 1; drawing: THREAD TOL. per..., 2026-11-02 19:11:11.008633+05:30).
+
+100937080 | 'Pitch Dia 1 (Nut End)'        | exp=6.93928  | tol=0.0508   | unit='mm'
+100937080 | 'Major Dia 1 (Nut End)'        | exp=7.79653  | tol=0.11049  | unit='mm'
+100937080 | 'Minor Dia 1 (Nut End)'        | exp=6.17474  | tol=None     | unit='mm'
+  *** FAIL: null value in column "tolerance" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (adfe7666-579e-4dee-8d1c-852a7a4628e1, be318c99-0c26-41b9-8161-8c276ed621ff, Minor Dia 1 (Nut End), 6.17474, null, mm, Maximum limit only; tol class: max, 2026-11-02 19:11:11.010112+05:30).
+
+100937080 | 'External Thread 2 (Metal End)' | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (d38d4607-2ba2-4b95-9c97-d22adbfef080, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 2 (Metal End), null, null, , Drawing: 5/16"-18 UNC 2A; expected: 5/16"-18 UNC; tol class: 2A, 2026-11-02 19:11:11.010814+05:30).
+
+100937080 | 'Pitch Dia 2 (Metal End)'      | exp=6.93928  | tol=0.0508   | unit='mm'
+100937080 | 'Major Dia 2 (Metal End)'      | exp=7.79653  | tol=0.11049  | unit='mm'
+100937080 | 'Minor Dia 2 (Metal End)'      | exp=6.17474  | tol=None     | unit='mm'
+  *** FAIL: null value in column "tolerance" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (ac650813-fc57-4009-bfa3-0a9dbf64c729, be318c99-0c26-41b9-8161-8c276ed621ff, Minor Dia 2 (Metal End), 6.17474, null, mm, Maximum limit only; tol class: max, 2026-11-02 19:11:11.012564+05:30).
+
+100937080 | 'Thread Length 1 (Nut End)'    | exp=19.3     | tol=0.5      | unit='mm'
+100937080 | 'Thread Length 2 (Metal End)'  | exp=11.6     | tol=0.8      | unit='mm'
+100937080 | 'Total Length'                 | exp=38.1     | tol=0.8      | unit='mm'
+100937080 | 'Shank Diameter'               | exp=7.9      | tol=0.2      | unit='mm'
+8910100714 | 'External Thread 1 (Metal End)' | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (6671676d-e1ee-4406-8ceb-e78311222668, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 1 (Metal End), null, null, , Drawing: M8x1.25 (metal end); expected: M8x1.25; tol class: IS21..., 2026-11-02 19:11:11.015673+05:30).
+
+8910100714 | 'Pitch Dia 1 (Metal End)'      | exp=7.2235   | tol=0.0355   | unit='mm'
+8910100714 | 'Major Dia 1 (Metal End)'      | exp=7.934    | tol=0.066    | unit='mm'
+8910100714 | 'Minor Dia 1 (Metal End)'      | exp=6.447    | tol=0.056    | unit='mm'
+8910100714 | 'External Thread 2 (Nut End)'  | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (09c66c60-e2a4-4614-a91e-1251eb59cd52, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 2 (Nut End), null, null, , Drawing: M8x1.25 (nut end); expected: M8x1.25; tol class: 6h, 2026-11-02 19:11:11.018105+05:30).
+
+8910100714 | 'Pitch Dia 2 (Nut End)'        | exp=7.129    | tol=0.059    | unit='mm'
+8910100714 | 'Major Dia 2 (Nut End)'        | exp=7.894    | tol=0.106    | unit='mm'
+8910100714 | 'Minor Dia 2 (Nut End)'        | exp=6.4735   | tol=0.1735   | unit='mm'
+8910100714 | 'Thread Length 1 (Metal End)'  | exp=16.0     | tol=0.5      | unit='mm'
+8910100714 | 'Thread Length 2 (Nut End)'    | exp=28.0     | tol=0.5      | unit='mm'
+8910100714 | 'Shank Length'                 | exp=1.75     | tol=0.75     | unit='mm'
+8910100714 | 'Shank Diameter'               | exp=7.925    | tol=0.075    | unit='mm'
+8910100714 | 'Total Length'                 | exp=44.0     | tol=0.3      | unit='mm'
+8933200024 | 'External Thread 1 (Metal End)' | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (ca0c7b6e-8b52-485d-9472-002d8d0a7a84, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 1 (Metal End), null, null, , Drawing: M8x1.25 (metal end); expected: M8x1.25; tol class: IS21..., 2026-11-02 19:11:11.027191+05:30).
+
+8933200024 | 'Pitch Dia 1 (Metal End)'      | exp=7.2235   | tol=0.0355   | unit='mm'
+8933200024 | 'Major Dia 1 (Metal End)'      | exp=7.934    | tol=0.066    | unit='mm'
+8933200024 | 'Minor Dia 1 (Metal End)'      | exp=6.447    | tol=0.056    | unit='mm'
+8933200024 | 'External Thread 2 (Nut End)'  | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (1abd1648-f4f3-4e11-811a-338505dd5553, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 2 (Nut End), null, null, , Drawing: M8x1.25 (nut end); expected: M8x1.25; tol class: 6h, 2026-11-02 19:11:11.030782+05:30).
+
+8933200024 | 'Pitch Dia 2 (Nut End)'        | exp=7.129    | tol=0.059    | unit='mm'
+8933200024 | 'Major Dia 2 (Nut End)'        | exp=7.894    | tol=0.106    | unit='mm'
+8933200024 | 'Minor Dia 2 (Nut End)'        | exp=6.4735   | tol=0.1735   | unit='mm'
+8933200024 | 'Thread Length 1 (Metal End)'  | exp=16.0     | tol=0.5      | unit='mm'
+8933200024 | 'Thread Length 2 (Nut End)'    | exp=21.5     | tol=0.5      | unit='mm'
+8933200024 | 'Shank Length'                 | exp=1.75     | tol=0.75     | unit='mm'
+8933200024 | 'Shank Diameter'               | exp=7.925    | tol=0.075    | unit='mm'
+8933200064 | 'External Thread 1 (Metal End)' | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (aeef1ce7-e73f-4cf2-a1d0-e40789d3e734, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 1 (Metal End), null, null, , Drawing: M12x1.5 CLASS 4H (Excel: 4h); expected: M12x1.5; tol cl..., 2026-11-02 19:11:11.037992+05:30).
+
+8933200064 | 'Pitch Dia 1 (Metal End)'      | exp=10.981   | tol=0.045    | unit='mm'
+8933200064 | 'Major Dia 1 (Metal End)'      | exp=11.925   | tol=0.075    | unit='mm'
+8933200064 | 'Minor Dia 1 (Metal End)'      | exp=10.247   | tol=0.097    | unit='mm'
+8933200064 | 'External Thread 2 (Nut End)'  | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (db39210b-d185-4be1-8328-aec71e77d1a4, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread 2 (Nut End), null, null, , Drawing: M12x1.75 (nut end); expected: M12x1.75; tol class: 6h, 2026-11-02 19:11:11.042205+05:30).
+
+8933200064 | 'Pitch Dia 2 (Nut End)'        | exp=10.788   | tol=0.075    | unit='mm'
+8933200064 | 'Major Dia 2 (Nut End)'        | exp=11.8675  | tol=0.1325   | unit='mm'
+8933200064 | 'Minor Dia 2 (Nut End)'        | exp=9.87     | tol=0.235    | unit='mm'
+8933200064 | 'Thread Length 1 (Metal End)'  | exp=18.0     | tol=0.8      | unit='mm'
+8933200064 | 'Thread Length 2 (Total, Nut Side)' | exp=35.0     | tol=0.8      | unit='mm'
+8933200064 | 'Thread Length 3 (Nut End)'    | exp=30.0     | tol=0.8      | unit='mm'
+8933200064 | 'Shank Diameter'               | exp=12.0     | tol=0.2      | unit='mm'
+100922920 | 'External Thread'              | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (1918dbf6-2fc1-439a-834b-019b53a3a56d, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread, null, null, , Drawing: M4x0.7; expected: M4x0.7; tol class: 6h, 2026-11-02 19:11:11.050807+05:30).
+
+100922920 | 'Total Length'                 | exp=16.0     | tol=0.2      | unit='mm'
+100922920 | 'Head Slot Width'              | exp=0.9      | tol=0.1      | unit='mm'
+100922920 | 'Head Outer Diameter'          | exp=7.32     | tol=0.18     | unit='mm'
+8913505204 | 'External Thread'              | exp=None     | tol=None     | unit=''
+  *** FAIL: null value in column "expected_value" of relation "specifications" violates not-null constraint
+DETAIL:  Failing row contains (e46fe154-1030-4b3e-8eb4-5a998ca4bbbb, be318c99-0c26-41b9-8161-8c276ed621ff, External Thread, null, null, , Drawing: M7x1; expected: M7x1; tol class: 6h, 2026-11-02 19:11:11.054697+05:30).
+
+8913505204 | 'Step Diameter'                | exp=5.19     | tol=0.06     | unit='mm'
+8913505204 | 'Outer Diameter'               | exp=7.0      | tol=0.2      | unit='mm'
+8913505204 | 'Diameter'                     | exp=5.0      | tol=0.1      | unit='mm'
+8913505204 | 'Cross Hole Diameter'          | exp=1.5      | tol=0.1      | unit='mm'
+8913505204 | 'Inner Diameter (?3 bore)'     | exp=3.125    | tol=0.125    | unit='mm'
+8913505204 | 'Inner Diameter (?2 bore)'     | exp=2.125    | tol=0.125    | unit='mm'
+8913505204 | 'Across Flat (Hex 8)'          | exp=7.935    | tol=0.065    | unit='mm'
+8913505204 | 'Depth'                        | exp=26.95    | tol=0.2      | unit='mm'
+8920100094 | 'Step Diameter'                | exp=5.85     | tol=0.05     | unit='mm'
+8920100094 | 'Total Length'                 | exp=24.0     | tol=0.2      | unit='mm'
+8920100094 | 'Outer Diameter (Knurl)'       | exp=6.17     | tol=0.05     | unit='mm'
+8920100094 | 'Knurl Length'                 | exp=12.0     | tol=0.2      | unit='mm'
