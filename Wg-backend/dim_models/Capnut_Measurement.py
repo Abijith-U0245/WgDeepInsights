@@ -16,7 +16,7 @@ SIDE_CAM_INDEX = 1
 TOP_EXPOSURE = 3000.0   
 TOP_GAIN = 1.0        
 
-SIDE_EXPOSURE = 35000.0 
+SIDE_EXPOSURE = 75000.0 
 SIDE_GAIN = 5.3132         
 
 # 📏 PIXEL-TO-MM (PMM) FINAL PERFECT CALIBRATION
@@ -54,8 +54,9 @@ model = YOLO(r"C:\Users\abiji\deepinsight-windows\Wg-backend\surface_models\Capn
 # =====================================================================
 # 4. INITIALIZE CAMERAS & LOCK BY SERIAL NUMBER
 # =====================================================================
-TOP_CAM_SERIAL = "DA5211006"  
-SIDE_CAM_SERIAL = "DA4265515" 
+import os
+TOP_CAM_SERIAL = os.environ.get("GIGE_TOP_SERIAL", "DB0763438")  
+SIDE_CAM_SERIAL = os.environ.get("GIGE_SIDE_SERIAL", "DB0763412") 
 
 deviceList = MV_CC_DEVICE_INFO_LIST()
 ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, deviceList)

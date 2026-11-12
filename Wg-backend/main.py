@@ -96,36 +96,60 @@ async def health():
 
 def _annotate_live_measure(part: str, top: np.ndarray, side: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Lightweight overlay for the live preview (no heavy YOLO, just the camera feed)."""
-    top_d  = cv2.resize(top,  (640, 640))
-    side_d = cv2.resize(side, (640, 640))
+    th_top = max(1, int(640 * top.shape[0] / top.shape[1]))
+    th_side = max(1, int(640 * side.shape[0] / side.shape[1]))
+    top_d  = cv2.resize(top,  (640, th_top), interpolation=cv2.INTER_AREA)
+    side_d = cv2.resize(side, (640, th_side), interpolation=cv2.INTER_AREA)
     cv2.putText(top_d,  f"LIVE | {part.upper()} | TOP VIEW",  (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0,230,100), 2)
     cv2.putText(side_d, f"LIVE | {part.upper()} | SIDE VIEW", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0,200,255), 2)
     ts = time.strftime("%H:%M:%S")
-    cv2.putText(top_d,  ts, (10, 620), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180,180,180), 1)
-    cv2.putText(side_d, ts, (10, 620), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180,180,180), 1)
+    cv2.putText(top_d,  ts, (10, top_d.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180,180,180), 1)
+    cv2.putText(side_d, ts, (10, side_d.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180,180,180), 1)
     return top_d, side_d
 
 
 async def _mjpeg_generator(part: str, cam: str = "all", mode: str = "measurement"):
-    """Yields multipart MJPEG frames. cam can be 'top', 'side', or 'all'."""
+    """Yields multipart MJPEG frames. cam can be 'top', 'side', 'right', or 'all'.
+    Ultra-low latency: reads pre-scaled 640x640 display cache directly with zero CPU resize.
+    """
     mgr = CameraManager.instance()
     await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, part, mode)
+
     while True:
-        top, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
-        top_d, side_d = _annotate_live_measure(part, top, side)
+        ts = time.strftime("%H:%M:%S")
+
         if cam == "top":
-            frame = top_d
+            frame = mgr.grab_top_display().copy()
+            cv2.putText(frame, f"LIVE | {part.upper()} | TOP VIEW", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 230, 100), 2)
+            cv2.putText(frame, ts, (10, frame.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+
         elif cam == "side":
-            frame = side_d
+            frame = mgr.grab_side_display().copy()
+            cv2.putText(frame, f"LIVE | {part.upper()} | SIDE VIEW", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 200, 255), 2)
+            cv2.putText(frame, ts, (10, frame.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+
+        elif cam == "right":
+            frame = mgr.grab_right_display().copy()
+            cv2.putText(frame, f"LIVE | {part.upper()} | RIGHT SIDE VIEW", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (200, 100, 255), 2)
+            cv2.putText(frame, ts, (10, frame.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+
         else:
-            frame = np.hstack([top_d, side_d])
-        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            top = mgr.grab_top_display()
+            side = mgr.grab_side_display()
+            frame = np.hstack([top, side])
+
+        # JPEG quality 50 significantly reduces streaming bandwidth for ultra-low latency
+        # without sacrificing camera field-of-view (100% full uncropped sensor frame preserved)
+        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
         yield (
             b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
             + buf.tobytes()
             + b"\r\n"
         )
-        await asyncio.sleep(1 / 20)  # ~20 fps smooth live stream
+        await asyncio.sleep(0.04)  # ~25 fps smooth real-time stream
 
 
 @app.get("/stream/{part}/measure")
@@ -160,6 +184,21 @@ async def stream_side(part: str):
     key = _normalise(part)
     return StreamingResponse(
         _mjpeg_generator(key, cam="side", mode="measurement"),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@app.get("/stream/{part}/right")
+async def stream_right(part: str):
+    """MJPEG live stream for CAM 3 / Right Side camera.
+
+    Uses the dedicated right camera when a 3rd GigE camera is connected
+    (set GIGE_RIGHT_SERIAL env var).  Falls back to a branded placeholder
+    frame so the endpoint always returns 200 — never 404.
+    """
+    key = _normalise(part)
+    return StreamingResponse(
+        _mjpeg_generator(key, cam="right", mode="measurement"),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -326,6 +365,17 @@ async def capture_side_snapshot(part: str):
     await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
     _, side = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_pair)
     _, buf = cv2.imencode(".jpg", side, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return Response(content=buf.tobytes(), media_type="image/jpeg")
+
+
+@app.get("/capture/{part}/right")
+async def capture_right_snapshot(part: str):
+    """Capture one high-resolution JPEG snapshot frame from Right Side (CAM 3) camera."""
+    key = _normalise(part)
+    mgr = CameraManager.instance()
+    await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
+    right = await asyncio.get_event_loop().run_in_executor(None, mgr.grab_right)
+    _, buf = cv2.imencode(".jpg", right, [cv2.IMWRITE_JPEG_QUALITY, 90])
     return Response(content=buf.tobytes(), media_type="image/jpeg")
 
 

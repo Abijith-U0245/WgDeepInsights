@@ -48,7 +48,7 @@ type SearchParams = {
 
 export const Route = createFileRoute("/_authenticated/analytics")({
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
-    part: typeof search.part === "string" ? search.part : undefined,
+    part: typeof search["part"] === "string" ? (search["part"] as string) : undefined,
   }),
   head: () => ({
     meta: [
@@ -242,7 +242,8 @@ function AnalyticsPage() {
       if (timeStr) {
         const partsTime = timeStr.split(":");
         if (partsTime.length >= 1) {
-          const hourKey = `${partsTime[0].padStart(2, "0")}:00`;
+          const hourPart = partsTime[0] ?? "";
+          const hourKey = `${hourPart.padStart(2, "0")}:00`;
           if (counts[hourKey] !== undefined) {
             counts[hourKey] += 1;
           }
@@ -301,8 +302,8 @@ function AnalyticsPage() {
       const dateObj = new Date(i.inspection_date || i.created_at);
       if (!isNaN(dateObj.getTime())) {
         const dayIdx = (dateObj.getDay() + 6) % 7; // Monday = index 0
-        const dayName = daysOrder[dayIdx];
-        const existing = map.get(dayName) || { total: 0, defects: 0 };
+        const dayName = daysOrder[dayIdx] ?? "Mon";
+        const existing = map.get(dayName) ?? { total: 0, defects: 0 };
         const isDefect = i.status?.toLowerCase() === "reject" || i.status?.toLowerCase() === "fail";
         map.set(dayName, {
           total: existing.total + 1,

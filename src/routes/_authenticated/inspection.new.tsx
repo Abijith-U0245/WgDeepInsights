@@ -106,6 +106,107 @@ const STEPS = [
   { label: "Capture & Inspect", icon: Camera },
 ];
 
+// ── CameraFeedSlot ─────────────────────────────────────────────────────────
+// Dedicated component for each camera feed.
+// • Loads the MJPEG stream eagerly (no browser lazy-load delay).
+// • Shows a live-indicator overlay once the first frame arrives.
+// • On network error, retries automatically every 3 s so CAM 3
+//   (or any camera that takes longer to initialise) becomes visible
+//   as soon as the backend stream is ready.
+// • Offline / "not visible" state falls back to a graceful placeholder.
+function CameraFeedSlot({
+  label,
+  url,
+  accent,
+  backendOnline,
+}: {
+  label: string;
+  url: string;
+  accent: string;
+  backendOnline: boolean;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError]   = useState(false);
+  // Key forces a fresh <img> mount on each retry, clearing the stale error.
+  const [retryKey, setRetryKey] = useState(0);
+
+  // Auto-retry on error — MJPEG streams sometimes need a moment to start.
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError(false);
+      setLoaded(false);
+      setRetryKey((k) => k + 1);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  // Reset loaded/error state whenever the URL or online status changes.
+  useEffect(() => {
+    setLoaded(false);
+    setError(false);
+    setRetryKey((k) => k + 1);
+  }, [url, backendOnline]);
+
+  return (
+    <div
+      className={`relative h-[300px] w-full overflow-hidden rounded-xl border-2 ${accent} bg-slate-950 flex items-center justify-center shadow-inner`}
+    >
+      {backendOnline ? (
+        <>
+          {/* MJPEG stream — load eagerly, no lazy decode lag */}
+          <img
+            key={`${url}-${retryKey}`}
+            src={url}
+            alt={`${label} live feed`}
+            loading="eager"
+            decoding="async"
+            fetchPriority="high"
+            className={`h-full w-full object-contain bg-slate-950 transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+            onLoad={() => { setLoaded(true); setError(false); }}
+            onError={() => { setLoaded(false); setError(true); }}
+          />
+          {/* Spinner shown while stream is connecting */}
+          {!loaded && !error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950">
+              <Loader2 className="size-6 animate-spin text-muted-foreground/50" />
+              <p className="text-[10px] text-muted-foreground/50">Connecting…</p>
+            </div>
+          )}
+          {/* Retry overlay shown on stream error */}
+          {error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950">
+              <WifiOff className="size-6 text-muted-foreground/40" />
+              <p className="text-[10px] text-muted-foreground/50">Retrying…</p>
+            </div>
+          )}
+          {/* Live indicator dot — placed top-right to avoid overlapping in-video label */}
+          {loaded && (
+            <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-slate-900/80 px-2 py-0.5 backdrop-blur-sm shadow-sm">
+              <span className="relative flex size-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-400">LIVE</span>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 border border-dashed border-border bg-muted/20 px-4">
+          <Camera className="size-8 text-muted-foreground/30" />
+          <p className="text-center text-xs text-muted-foreground/60">Backend offline</p>
+        </div>
+      )}
+      {/* Label pill at bottom */}
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-slate-950/80 py-2 backdrop-blur-sm">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          {label}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function NewInspectionPage() {
   const { part: searchPart } = Route.useSearch();
   const navigate = useNavigate();
@@ -699,34 +800,17 @@ function NewInspectionPage() {
               {/* All 3 cameras — equal 3-column horizontal strip */}
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: "CAM 1 / TOP VIEW",        url: topStreamUrl(activePartName),   accent: "border-emerald-500/40" },
-                  { label: "CAM 2 / LEFT SIDE VIEW",  url: sideStreamUrl(activePartName),  accent: "border-sky-500/40" },
-                  { label: "CAM 3 / RIGHT SIDE VIEW", url: rightStreamUrl(activePartName), accent: "border-violet-500/40" },
+                  { label: "CAM 1 / TOP VIEW",        url: topStreamUrl(activePartName),   accent: "border-emerald-500/40",  camId: "cam1" },
+                  { label: "CAM 2 / LEFT SIDE VIEW",  url: sideStreamUrl(activePartName),  accent: "border-sky-500/40",      camId: "cam2" },
+                  { label: "CAM 3 / RIGHT SIDE VIEW", url: rightStreamUrl(activePartName), accent: "border-violet-500/40",   camId: "cam3" },
                 ].map((camera) => (
-                  <div
-                    key={camera.label}
-                    className={`relative h-[300px] w-full overflow-hidden rounded-xl border-2 ${camera.accent} bg-slate-950 flex items-center justify-center shadow-inner`}
-                  >
-                    {backendStatus !== "offline" ? (
-                      <img
-                        key={camera.url}
-                        src={camera.url}
-                        alt={`${camera.label} live feed`}
-                        className="h-full w-full object-contain bg-slate-950"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 border border-dashed border-border bg-muted/20 px-4">
-                        <Camera className="size-8 text-muted-foreground/30" />
-                        <p className="text-center text-xs text-muted-foreground/60">Backend offline</p>
-                      </div>
-                    )}
-                    {/* Label pill at bottom */}
-                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-slate-950/80 py-2 backdrop-blur-sm">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                        {camera.label}
-                      </span>
-                    </div>
-                  </div>
+                  <CameraFeedSlot
+                    key={camera.camId}
+                    label={camera.label}
+                    url={camera.url}
+                    accent={camera.accent}
+                    backendOnline={backendStatus !== "offline"}
+                  />
                 ))}
               </div>
             </SectionCard>

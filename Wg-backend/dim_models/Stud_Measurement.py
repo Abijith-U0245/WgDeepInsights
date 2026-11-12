@@ -46,8 +46,9 @@ model = YOLO(r"C:\Users\abiji\deepinsight\Wg-backend\surface_models\Stud_best.pt
 # =====================================================================
 # 4. INITIALIZE CAMERAS & LOCK BY SERIAL NUMBER
 # =====================================================================
-TOP_CAM_SERIAL = "DA5211006"  
-SIDE_CAM_SERIAL = "DA4265515" 
+import os
+TOP_CAM_SERIAL = os.environ.get("GIGE_TOP_SERIAL", "DB0763438")  
+SIDE_CAM_SERIAL = os.environ.get("GIGE_SIDE_SERIAL", "DB0763412") 
 
 deviceList = MV_CC_DEVICE_INFO_LIST()
 ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, deviceList)

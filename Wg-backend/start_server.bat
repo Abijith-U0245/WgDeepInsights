@@ -6,19 +6,19 @@ echo ======================================
 echo.
 cd /d "%~dp0"
 
-REM ── GigE Camera IPs ──────────────────────────────────────────────────────
-REM Set these to match your Hikrobot camera IPs (check in MVS Studio software)
-set GIGE_TOP_IP=192.168.1.101
-set GIGE_SIDE_IP=192.168.1.102
+REM ── GigE Camera IPs & Serials (Verified via MVS Studio) ───────────────────
+set GIGE_TOP_IP=10.10.12.6
+set GIGE_SIDE_IP=10.10.12.2
+set GIGE_RIGHT_IP=10.10.12.1
 
-REM Optional: override camera settings
-REM set GIGE_EXPOSURE=80000
-REM set GIGE_GAIN=12.0
-REM set GIGE_FPS=15
+set GIGE_TOP_SERIAL=DB0763438
+set GIGE_SIDE_SERIAL=DB0763412
+set GIGE_RIGHT_SERIAL=DB1473979
 
-echo Camera IPs:
-echo   TOP  → %GIGE_TOP_IP%
-echo   SIDE → %GIGE_SIDE_IP%
+echo Camera Configuration:
+echo   Box 1 (TOP VIEW)        → Serial DB0763438 (IP %GIGE_TOP_IP%)
+echo   Box 2 (LEFT SIDE VIEW)  → Serial DB0763412 (IP %GIGE_SIDE_IP%, 180° Rotated)
+echo   Box 3 (RIGHT SIDE VIEW) → Serial DB1473979 (IP %GIGE_RIGHT_IP%, 180° Rotated)
 echo.
 
 REM Install dependencies if needed
