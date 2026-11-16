@@ -247,41 +247,47 @@ class CameraManager:
                 print(f"[CAM] Box 3 -> Assigned to RIGHT SIDE camera ({serial})")
 
         # ── Start Grabbing with Role-Specific Exposure & Gain ────────────────
+        # Standard Default:
+        # TOP:   exp: 5245.0,  gain: 3.4464
+        # LEFT:  exp: 20000.0, gain: 9.65
+        # RIGHT: exp: 78000.0, gain: 9.5
         if "top" in self._cameras:
             c = self._cameras["top"]
             try:
                 c.MV_CC_SetEnumValue("ExposureAuto", 0)
                 c.MV_CC_SetEnumValue("GainAuto", 0)
-                c.MV_CC_SetFloatValue("ExposureTime", 3500.0)
-                c.MV_CC_SetFloatValue("Gain", 1.5)
+                c.MV_CC_SetFloatValue("ExposureTime", 5245.0)
+                c.MV_CC_SetFloatValue("Gain", 3.4464)
             except Exception as e:
                 print(f"[CAM] Top exposure init error: {e}")
             c.MV_CC_StartGrabbing()
-            print("[CAM] Box 1 (TOP VIEW) active with 3500us exposure")
+            print("[CAM] Box 1 (TOP VIEW) active: exp=5245.0us, gain=3.4464")
 
         if "side" in self._cameras:
             c = self._cameras["side"]
             try:
                 c.MV_CC_SetEnumValue("ExposureAuto", 0)
                 c.MV_CC_SetEnumValue("GainAuto", 0)
-                c.MV_CC_SetFloatValue("ExposureTime", 75000.0)
-                c.MV_CC_SetFloatValue("Gain", 5.3132)
+                c.MV_CC_SetFloatValue("ExposureTime", 20000.0)
+                c.MV_CC_SetFloatValue("Gain", 9.65)
             except Exception as e:
                 print(f"[CAM] Left side exposure init error: {e}")
             c.MV_CC_StartGrabbing()
-            print("[CAM] Box 2 (LEFT SIDE VIEW) active with 75000us exposure")
+            print("[CAM] Box 2 (LEFT SIDE VIEW) active: exp=20000.0us, gain=9.65 (180° Rotated)")
 
         if "right" in self._cameras:
             c = self._cameras["right"]
             try:
                 c.MV_CC_SetEnumValue("ExposureAuto", 0)
                 c.MV_CC_SetEnumValue("GainAuto", 0)
-                c.MV_CC_SetFloatValue("ExposureTime", 75000.0)
-                c.MV_CC_SetFloatValue("Gain", 5.3132)
+                c.MV_CC_SetFloatValue("ExposureTime", 78000.0)
+                c.MV_CC_SetFloatValue("Gain", 9.5)
             except Exception as e:
                 print(f"[CAM] Right side exposure init error: {e}")
             c.MV_CC_StartGrabbing()
-            print("[CAM] Box 3 (RIGHT SIDE VIEW) active with 75000us exposure")
+            print("[CAM] Box 3 (RIGHT SIDE VIEW) active: exp=78000.0us, gain=9.5 (180° Rotated)")
+
+        self._current_params = ("standard", "standard")
 
         # Fallback index mapping if serials didn't match directly but cameras present
         if "top" in self._cameras or "side" in self._cameras:
@@ -420,86 +426,26 @@ class CameraManager:
     def ready(self) -> bool:
         return DEMO_MODE or ("top" in self._cameras and "side" in self._cameras) or len(self._cameras) > 0
 
+    STANDARD_EXPOSURES = {
+        "top_exposure": 5245.0,
+        "top_gain": 3.4464,
+        "side_exposure": 20000.0,
+        "side_gain": 9.65,
+        "right_exposure": 78000.0,
+        "right_gain": 9.5,
+    }
+
     def set_parameters(self, part_name: str, mode: str = "measurement"):
-        """Dynamically configure the exposure and gain for the specified part and mode."""
+        """Configure camera exposure and gain using the software standard defaults."""
         if DEMO_MODE:
             return
 
-        key = part_name.lower().replace("-", "").replace(" ", "")
-        m_key = "inspect" if mode.lower() in ("inspect", "surface", "surfacedefect") else "measurement"
+        # Standard Default as requested:
+        # Top: exp=5245.0, gain=3.4464 | Left: exp=20000.0, gain=9.65 | Right: exp=78000.0, gain=9.5
+        if self._current_params == ("standard", "standard"):
+            return  # Already configured to standard — avoid blocking camera locks or dropping frames
 
-        if self._current_params == (key, m_key):
-            return  # Already set to these params — avoid blocking camera locks & network roundtrips
-
-        # Preset exposure & gain settings for each part and mode
-        presets = {
-            "capnut": {
-                "measurement": {
-                    "top_exposure": 3500.0, "top_gain": 1.5,
-                    "side_exposure": 75000.0, "side_gain": 5.3132,
-                    "right_exposure": 75000.0, "right_gain": 5.3132,
-                },
-                "inspect": {
-                    "top_exposure": 3500.0, "top_gain": 1.5,
-                    "side_exposure": 75000.0, "side_gain": 5.3132,
-                    "right_exposure": 75000.0, "right_gain": 5.3132,
-                }
-            },
-            "stud": {
-                "measurement": {
-                    "top_exposure": 3000.0, "top_gain": 1.0,
-                    "side_exposure": 30000.0, "side_gain": 5.3132,
-                    "right_exposure": 30000.0, "right_gain": 5.3132,
-                },
-                "inspect": {
-                    "top_exposure": 3000.0, "top_gain": 1.0,
-                    "side_exposure": 30000.0, "side_gain": 5.3132,
-                    "right_exposure": 30000.0, "right_gain": 5.3132,
-                }
-            },
-            "adapter": {
-                "measurement": {
-                    "top_exposure": 4274.0, "top_gain": 1.0,
-                    "side_exposure": 33571.0, "side_gain": 6.3,
-                    "right_exposure": 33571.0, "right_gain": 6.3,
-                },
-                "inspect": {
-                    "top_exposure": 4274.0, "top_gain": 1.0,
-                    "side_exposure": 33571.0, "side_gain": 6.3,
-                    "right_exposure": 33571.0, "right_gain": 6.3,
-                }
-            },
-            "adaptor": {
-                "measurement": {
-                    "top_exposure": 4274.0, "top_gain": 1.0,
-                    "side_exposure": 33571.0, "side_gain": 6.3,
-                    "right_exposure": 33571.0, "right_gain": 6.3,
-                },
-                "inspect": {
-                    "top_exposure": 4274.0, "top_gain": 1.0,
-                    "side_exposure": 33571.0, "side_gain": 6.3,
-                    "right_exposure": 33571.0, "right_gain": 6.3,
-                }
-            },
-            "pin": {
-                "measurement": {
-                    "top_exposure": 3000.0, "top_gain": 1.0,
-                    "side_exposure": 35000.0, "side_gain": 7.0,
-                    "right_exposure": 35000.0, "right_gain": 7.0,
-                },
-                "inspect": {
-                    "top_exposure": 3000.0, "top_gain": 1.0,
-                    "side_exposure": 35000.0, "side_gain": 7.0,
-                    "right_exposure": 35000.0, "right_gain": 7.0,
-                }
-            }
-        }
-
-        part_presets = presets.get(key)
-        if not part_presets:
-            return
-
-        p = part_presets.get(m_key, part_presets["measurement"])
+        p = self.STANDARD_EXPOSURES
 
         top_cam   = self._cameras.get("top")
         side_cam  = self._cameras.get("side")
@@ -512,9 +458,9 @@ class CameraManager:
                     top_cam.MV_CC_SetEnumValue("GainAuto", 0)
                     top_cam.MV_CC_SetFloatValue("ExposureTime", float(p["top_exposure"]))
                     top_cam.MV_CC_SetFloatValue("Gain", float(p["top_gain"]))
-                    print(f"[CAM] Set top camera params for {key}: exp={p['top_exposure']}, gain={p['top_gain']}")
+                    print(f"[CAM] Set top camera params: exp={p['top_exposure']}, gain={p['top_gain']}")
                 except Exception as e:
-                    print(f"[CAM] Failed to set top parameters for {key}: {e}")
+                    print(f"[CAM] Failed to set top parameters: {e}")
 
         if side_cam:
             with self._cam_locks.get("side", self._cam_lock):
@@ -523,24 +469,22 @@ class CameraManager:
                     side_cam.MV_CC_SetEnumValue("GainAuto", 0)
                     side_cam.MV_CC_SetFloatValue("ExposureTime", float(p["side_exposure"]))
                     side_cam.MV_CC_SetFloatValue("Gain", float(p["side_gain"]))
-                    print(f"[CAM] Set side camera params for {key}: exp={p['side_exposure']}, gain={p['side_gain']}")
+                    print(f"[CAM] Set left side camera params: exp={p['side_exposure']}, gain={p['side_gain']}")
                 except Exception as e:
-                    print(f"[CAM] Failed to set side parameters for {key}: {e}")
+                    print(f"[CAM] Failed to set side parameters: {e}")
 
         if right_cam:
             with self._cam_locks.get("right", self._cam_lock):
                 try:
-                    r_exp = p.get("right_exposure", p.get("side_exposure", 75000.0))
-                    r_gain = p.get("right_gain", p.get("side_gain", 5.3132))
                     right_cam.MV_CC_SetEnumValue("ExposureAuto", 0)
                     right_cam.MV_CC_SetEnumValue("GainAuto", 0)
-                    right_cam.MV_CC_SetFloatValue("ExposureTime", float(r_exp))
-                    right_cam.MV_CC_SetFloatValue("Gain", float(r_gain))
-                    print(f"[CAM] Set right camera params for {key}: exp={r_exp}, gain={r_gain}")
+                    right_cam.MV_CC_SetFloatValue("ExposureTime", float(p["right_exposure"]))
+                    right_cam.MV_CC_SetFloatValue("Gain", float(p["right_gain"]))
+                    print(f"[CAM] Set right side camera params: exp={p['right_exposure']}, gain={p['right_gain']}")
                 except Exception as e:
-                    print(f"[CAM] Failed to set right parameters for {key}: {e}")
+                    print(f"[CAM] Failed to set right parameters: {e}")
 
-        self._current_params = (key, m_key)
+        self._current_params = ("standard", "standard")
 
     def grab_pair(self) -> tuple[np.ndarray, np.ndarray]:
         """Return (top_frame, side_frame) — non-blocking cached reads for high-speed streaming."""

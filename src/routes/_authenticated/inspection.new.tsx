@@ -14,6 +14,7 @@ import {
   Info,
   Loader2,
   PlayCircle,
+  RotateCcw,
   Ruler,
   Scan,
   ScanEye,
@@ -328,53 +329,57 @@ function NewInspectionPage() {
     setBatchResult(null);
   }, [partId]);
 
-  async function handleCaptureSnapshot() {
+  // ── 2-Step Inspection Workflow State ──────────────────────────────────────────
+  // Pass 1: 3 images (Top + Left Side + Right Side)
+  // Pass 2: 3 images (Top + Left Side + Right Side)
+  // Both sets are evaluated for visual (YOLO) and dimensional measurement inspection.
+  const completedPasses = Math.min(topSnapshots.length, sideSnapshots.length, rightSnapshots.length);
+
+  async function captureAllThreeCameras(): Promise<{ top: string; side: string; right: string } | null> {
     const ts = Date.now();
-    const currentPairCount = Math.max(topSnapshots.length, sideSnapshots.length, rightSnapshots.length);
-    const nextPairIndex = currentPairCount + 1;
+    const pName = activePartName;
 
-    const canCaptureTop   = topSnapshots.length < 5;
-    const canCaptureSide  = sideSnapshots.length < 5;
-    const canCaptureRight = rightSnapshots.length < 5;
-
-    if (!canCaptureTop && !canCaptureSide && !canCaptureRight) {
-      toast.error("Maximum limit of 5 snapshots per camera reached. Delete an image to capture more.");
-      return;
-    }
-
-    const pName = part?.part_name ?? "capnut";
-
-    // Trigger AI background pre-inference asynchronously
-    processPair(pName, nextPairIndex).catch((err) => {
-      console.warn(`Pair #${nextPairIndex} background pre-inference status:`, err);
-    });
-
-    const captureFromUrl = async (
-      url: string,
-      setter: React.Dispatch<React.SetStateAction<SnapshotItem[]>>,
-      prefix: string
-    ) => {
-      try {
-        const res = await fetch(url + `?t=${ts}`);
-        if (res.ok) {
-          const blob = await res.blob();
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const b64 = reader.result as string;
-            setter((prev) => [...prev, { id: `${prefix}-${ts}`, timestamp: new Date().toLocaleTimeString(), preview: b64 }]);
-          };
-          reader.readAsDataURL(blob);
-        }
-      } catch (err) {
-        console.error(`Failed to capture ${prefix} snapshot:`, err);
-      }
+    const fetchB64 = async (url: string) => {
+      const res = await fetch(`${url}?t=${ts}`);
+      if (!res.ok) throw new Error(`Camera fetch status: ${res.status}`);
+      const blob = await res.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
     };
 
-    if (canCaptureTop)   await captureFromUrl(topCaptureUrl(pName),   setTopSnapshots,   "top");
-    if (canCaptureSide)  await captureFromUrl(sideCaptureUrl(pName),  setSideSnapshots,  "side");
-    if (canCaptureRight) await captureFromUrl(rightCaptureUrl(pName), setRightSnapshots, "right");
+    try {
+      const [topB64, sideB64, rightB64] = await Promise.all([
+        fetchB64(topCaptureUrl(pName)),
+        fetchB64(sideCaptureUrl(pName)),
+        fetchB64(rightCaptureUrl(pName)),
+      ]);
 
-    toast.success("Part captured from all 3 cameras", { duration: 1000 });
+      const timeStr = new Date().toLocaleTimeString();
+      setTopSnapshots((prev) => [...prev, { id: `top-${ts}`, timestamp: timeStr, preview: topB64 }]);
+      setSideSnapshots((prev) => [...prev, { id: `side-${ts}`, timestamp: timeStr, preview: sideB64 }]);
+      setRightSnapshots((prev) => [...prev, { id: `right-${ts}`, timestamp: timeStr, preview: rightB64 }]);
+
+      return { top: topB64, side: sideB64, right: rightB64 };
+    } catch (err) {
+      console.error("Camera capture error:", err);
+      toast.error("Could not capture from all 3 cameras. Ensure backend is running.", { duration: 2000 });
+      return null;
+    }
+  }
+
+  async function handleCaptureSnapshot() {
+    if (completedPasses >= 2) {
+      toast.info("Maximum limit of 2 passes (6 images) reached. Click Inspect to evaluate or Reset to restart.");
+      return;
+    }
+    const snap = await captureAllThreeCameras();
+    if (snap) {
+      toast.success(`Pass ${completedPasses + 1}/2 captured from all 3 cameras!`, { duration: 1500 });
+    }
   }
 
   function removeTopSnapshot(id: string) {
@@ -416,22 +421,55 @@ function NewInspectionPage() {
   }
 
   async function handleInspectPart() {
-    const totalPairs = Math.max(topSnapshots.length, sideSnapshots.length);
-    if (totalPairs === 0) {
-      toast.error("Please capture at least 1 image before running inspection.", { duration: 1500 });
+    // If inspection already ran and user clicks again, reset to start fresh 2-pass test
+    if (batchResult || completedPasses >= 2) {
+      setTopSnapshots([]);
+      setSideSnapshots([]);
+      setRightSnapshots([]);
+      setBatchResult(null);
+      toast.info("Starting fresh inspection. Press Inspect for Pass 1.", { duration: 2000 });
       return;
     }
-    setRunning("inspect");
-    try {
-      const topImgs = topSnapshots.map((s) => s.preview);
-      const sideImgs = sideSnapshots.map((s) => s.preview);
-      const bRes = await runBatchTest(activePartName, totalPairs, topImgs, sideImgs);
-      setBatchResult(bRes);
-      toast.success("Inspected", { duration: 1000 });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Inspection failed", { duration: 1500 });
-    } finally {
-      setRunning(null);
+
+    // ── PRESS 1: Capture Pass 1 (3 images: Top, Left, Right) ──
+    if (completedPasses === 0) {
+      setRunning("inspect");
+      try {
+        const snap = await captureAllThreeCameras();
+        if (snap) {
+          toast.success("Pass 1 of 2 captured (Top + 2 Sides)! Please reposition/rotate part and press Inspect for Pass 2.", {
+            duration: 4000,
+          });
+        }
+      } finally {
+        setRunning(null);
+      }
+      return;
+    }
+
+    // ── PRESS 2: Capture Pass 2 (3 images) & Run Inspection on BOTH Sets ──
+    if (completedPasses === 1) {
+      setRunning("inspect");
+      try {
+        const snap2 = await captureAllThreeCameras();
+        if (!snap2) return;
+
+        // Gather both sets (Pass 1 and Pass 2)
+        const topImgs   = [...topSnapshots.map((s) => s.preview), snap2.top];
+        const sideImgs  = [...sideSnapshots.map((s) => s.preview), snap2.side];
+        const rightImgs = [...rightSnapshots.map((s) => s.preview), snap2.right];
+
+        toast.info("Analyzing both sets for dimensional measurements & visual defects...", { duration: 1500 });
+
+        const bRes = await runBatchTest(activePartName, 2, topImgs, sideImgs, rightImgs);
+        setBatchResult(bRes);
+        toast.success("Inspection verified! Both passes evaluated.", { duration: 2500 });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Inspection failed", { duration: 2500 });
+      } finally {
+        setRunning(null);
+      }
+      return;
     }
   }
 
@@ -777,23 +815,52 @@ function NewInspectionPage() {
               action={
                 <div className="flex items-center gap-3">
                   <button
-                    id="btn-capture-image"
-                    onClick={handleCaptureSnapshot}
-                    disabled={backendStatus === "offline" || (topSnapshots.length >= 5 && sideSnapshots.length >= 5 && rightSnapshots.length >= 5)}
-                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
-                  >
-                    <Camera className="size-4" />
-                    Capture (Top: {topSnapshots.length}/5, L: {sideSnapshots.length}/5, R: {rightSnapshots.length}/5)
-                  </button>
-                  <button
                     id="btn-inspect-part"
                     onClick={handleInspectPart}
-                    disabled={running !== null || backendStatus === "offline" || (topSnapshots.length === 0 && sideSnapshots.length === 0 && rightSnapshots.length === 0)}
-                    className="rounded-xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
+                    disabled={running !== null || backendStatus === "offline"}
+                    className={cn(
+                      "rounded-xl px-5 py-2.5 text-sm font-bold shadow-md transition-all flex items-center gap-2",
+                      batchResult
+                        ? "bg-slate-700 hover:bg-slate-800 text-white"
+                        : completedPasses === 0
+                        ? "bg-brand-blue hover:bg-brand-blue/90 text-white ring-2 ring-brand-blue/30 shadow-brand-blue/20"
+                        : "bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse ring-2 ring-emerald-400 shadow-emerald-600/30"
+                    )}
                   >
-                    {running === "inspect" ? <Loader2 className="size-4 animate-spin" /> : <Scan className="size-4" />}
-                    Inspect ({topSnapshots.length + sideSnapshots.length + rightSnapshots.length} image{topSnapshots.length + sideSnapshots.length + rightSnapshots.length === 1 ? "" : "s"})
+                    {running === "inspect" ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : batchResult ? (
+                      <RotateCcw className="size-4" />
+                    ) : (
+                      <Scan className="size-4" />
+                    )}
+                    {batchResult
+                      ? "Start New Inspection (Reset)"
+                      : completedPasses === 0
+                      ? "Inspect (Press 1 of 2 — Capture Pass 1)"
+                      : "Inspect (Press 2 of 2 — Run Full Analysis)"}
                   </button>
+
+                  <button
+                    id="btn-capture-image"
+                    onClick={handleCaptureSnapshot}
+                    disabled={running !== null || backendStatus === "offline" || completedPasses >= 2}
+                    className="rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground shadow-sm transition-opacity hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Camera className="size-3.5" />
+                    Capture ({completedPasses}/2 Passes)
+                  </button>
+
+                  {(topSnapshots.length > 0 || sideSnapshots.length > 0 || rightSnapshots.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={clearAllSnapshots}
+                      className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-500 transition-colors hover:bg-rose-500/20"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Reset
+                    </button>
+                  )}
                 </div>
               }
             >
@@ -818,9 +885,9 @@ function NewInspectionPage() {
             {/* Section 2: Captured Snapshots (Middle full-width row) */}
             <SectionCard
               title="Captured Snapshots"
-              subtitle="Row 1: CAM 1 (Top) • Row 2: CAM 2 (Left Side) • Row 3: CAM 3 (Right Side)"
+              subtitle="Row 1: CAM 1 (Top) • Row 2: CAM 2 (Left Side) • Row 3: CAM 3 (Right Side) — 2 Passes (6 Images Total)"
               action={
-                (topSnapshots.length > 0 || sideSnapshots.length > 0) && (
+                (topSnapshots.length > 0 || sideSnapshots.length > 0 || rightSnapshots.length > 0) && (
                   <button
                     type="button"
                     onClick={clearAllSnapshots}
@@ -839,7 +906,7 @@ function NewInspectionPage() {
                     <span className="text-sm font-semibold text-foreground">CAM 1 (TOP)</span>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">
-                        {topSnapshots.length} / 5 images
+                        {topSnapshots.length} / 2 passes
                       </span>
                       {topSnapshots.length > 0 && (
                         <button
@@ -863,7 +930,7 @@ function NewInspectionPage() {
                         <div key={item.id} className="group relative aspect-square h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-black">
                           <img src={item.preview} alt={`Top snapshot ${index + 1}`} className="size-full object-contain bg-black" />
                           <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">
-                            #{index + 1}
+                            Pass #{index + 1}
                           </div>
                           <button
                             type="button"
@@ -884,7 +951,7 @@ function NewInspectionPage() {
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-sm font-semibold text-foreground">CAM 2 (LEFT SIDE)</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">{sideSnapshots.length} / 5 images</span>
+                      <span className="text-xs text-muted-foreground">{sideSnapshots.length} / 2 passes</span>
                       {sideSnapshots.length > 0 && (
                         <button type="button" onClick={clearSideSnapshots} className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-500 transition-colors hover:bg-rose-500/20">
                           <Trash2 className="size-3" /> Clear Left
@@ -899,7 +966,7 @@ function NewInspectionPage() {
                       sideSnapshots.map((item, index) => (
                         <div key={item.id} className="group relative aspect-square h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-black">
                           <img src={item.preview} alt={`Left side snapshot ${index + 1}`} className="size-full object-contain bg-black" />
-                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">#{index + 1}</div>
+                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">Pass #{index + 1}</div>
                           <button type="button" onClick={() => removeSideSnapshot(item.id)} className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow transition-opacity hover:bg-rose-700" aria-label="Remove left side snapshot">
                             <XCircle className="size-3.5" />
                           </button>
@@ -914,7 +981,7 @@ function NewInspectionPage() {
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-sm font-semibold text-foreground">CAM 3 (RIGHT SIDE)</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">{rightSnapshots.length} / 5 images</span>
+                      <span className="text-xs text-muted-foreground">{rightSnapshots.length} / 2 passes</span>
                       {rightSnapshots.length > 0 && (
                         <button type="button" onClick={clearRightSnapshots} className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-500 transition-colors hover:bg-rose-500/20">
                           <Trash2 className="size-3" /> Clear Right
@@ -929,7 +996,7 @@ function NewInspectionPage() {
                       rightSnapshots.map((item, index) => (
                         <div key={item.id} className="group relative aspect-square h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-black">
                           <img src={item.preview} alt={`Right side snapshot ${index + 1}`} className="size-full object-contain bg-black" />
-                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">#{index + 1}</div>
+                          <div className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white">Pass #{index + 1}</div>
                           <button type="button" onClick={() => removeRightSnapshot(item.id)} className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow transition-opacity hover:bg-rose-700" aria-label="Remove right side snapshot">
                             <XCircle className="size-3.5" />
                           </button>
@@ -981,35 +1048,51 @@ function NewInspectionPage() {
                     subtitle={`Verified ${batchResult.total_pairs} captured pair(s) · ${batchResult.duration_ms}ms AI verification time`}
                   >
                     <div className="space-y-6">
-                      {/* Dimensional Analysis Frames (Pair #1 Only - 2 Frames) */}
-                      {batchResult.annotated_frames[0] && (
-                        <div className="space-y-2 rounded-xl border border-brand-blue/30 bg-brand-blue/5 p-4">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-brand-blue flex items-center gap-1.5">
-                              📐 Dimensional Measurement Model Analysis (Pair #1 Only — 2 Frames)
-                            </h4>
-                            <span className="text-[11px] font-mono text-muted-foreground">Top + Side Views</span>
-                          </div>
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-1">
-                              <span className="text-[11px] font-mono text-muted-foreground">Pair #1 Top — Dimensional Overlay</span>
-                              <img
-                                src={`data:image/jpeg;base64,${batchResult.annotated_frames[0].top_measure_b64}`}
-                                alt="Pair #1 Top Measurement"
-                                className="w-full rounded-md border border-border object-contain bg-black h-48"
-                              />
+                      {/* Dimensional Analysis Frames (Both Passes — Top + Left Side + Right Side Views) */}
+                      {batchResult.annotated_frames.map((pair) => (
+                        (pair.top_measure_b64 || pair.side_measure_b64 || pair.right_measure_b64) ? (
+                          <div key={`dim-pass-${pair.pair_index}`} className="space-y-2 rounded-xl border border-brand-blue/30 bg-brand-blue/5 p-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-brand-blue flex items-center gap-1.5">
+                                📐 Dimensional Measurement Model Analysis — Pass #{pair.pair_index}
+                              </h4>
+                              <span className="text-[11px] font-mono text-muted-foreground">Top + Left Side + Right Side Views</span>
                             </div>
-                            <div className="space-y-1">
-                              <span className="text-[11px] font-mono text-muted-foreground">Pair #1 Side — Dimensional Overlay</span>
-                              <img
-                                src={`data:image/jpeg;base64,${batchResult.annotated_frames[0].side_measure_b64}`}
-                                alt="Pair #1 Side Measurement"
-                                className="w-full rounded-md border border-border object-contain bg-black h-48"
-                              />
+                            <div className="grid gap-4 sm:grid-cols-3">
+                              {pair.top_measure_b64 && (
+                                <div className="space-y-1">
+                                  <span className="text-[11px] font-mono text-muted-foreground">Pass #{pair.pair_index} Top — Dimensional Overlay</span>
+                                  <img
+                                    src={`data:image/jpeg;base64,${pair.top_measure_b64}`}
+                                    alt={`Pass #${pair.pair_index} Top Measurement`}
+                                    className="w-full rounded-md border border-border object-contain bg-black h-48"
+                                  />
+                                </div>
+                              )}
+                              {pair.side_measure_b64 && (
+                                <div className="space-y-1">
+                                  <span className="text-[11px] font-mono text-muted-foreground">Pass #{pair.pair_index} Left Side — Dimensional Overlay</span>
+                                  <img
+                                    src={`data:image/jpeg;base64,${pair.side_measure_b64}`}
+                                    alt={`Pass #${pair.pair_index} Left Side Measurement`}
+                                    className="w-full rounded-md border border-border object-contain bg-black h-48"
+                                  />
+                                </div>
+                              )}
+                              {pair.right_measure_b64 && (
+                                <div className="space-y-1">
+                                  <span className="text-[11px] font-mono text-muted-foreground">Pass #{pair.pair_index} Right Side — Dimensional Overlay</span>
+                                  <img
+                                    src={`data:image/jpeg;base64,${pair.right_measure_b64}`}
+                                    alt={`Pass #${pair.pair_index} Right Side Measurement`}
+                                    className="w-full rounded-md border border-border object-contain bg-black h-48"
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                      )}
+                        ) : null
+                      ))}
 
                       {/* Surface Defect Analysis Frames (All Captured Frames - filtered) */}
                       {(() => {
@@ -1025,8 +1108,15 @@ function NewInspectionPage() {
                           if (pair.side_inspect_b64) {
                             items.push({
                               key: `p${pair.pair_index}-side-inspect`,
-                              label: `Pair #${pair.pair_index} Side`,
+                              label: `Pair #${pair.pair_index} Left Side`,
                               b64: pair.side_inspect_b64,
+                            });
+                          }
+                          if (pair.right_inspect_b64) {
+                            items.push({
+                              key: `p${pair.pair_index}-right-inspect`,
+                              label: `Pair #${pair.pair_index} Right Side`,
+                              b64: pair.right_inspect_b64,
                             });
                           }
                           return items;
@@ -1037,7 +1127,7 @@ function NewInspectionPage() {
                             <h4 className="text-xs font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
                               🔍 Surface Defect Model Analysis ({surfaceInspectFrames.length} Frames — {batchResult.total_pairs} Pair{batchResult.total_pairs === 1 ? "" : "s"})
                             </h4>
-                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                            <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6">
                               {surfaceInspectFrames.map((item) => (
                                 <div key={item.key} className="space-y-1 rounded-lg border border-border bg-muted/20 p-1.5">
                                   <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">

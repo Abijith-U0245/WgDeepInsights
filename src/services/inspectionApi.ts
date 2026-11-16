@@ -88,8 +88,10 @@ export type BatchAnnotatedFrame = {
   pair_index: number;
   top_measure_b64: string;
   side_measure_b64: string;
+  right_measure_b64?: string;
   top_inspect_b64: string;
   side_inspect_b64: string;
+  right_inspect_b64?: string;
   measure_status: "PASS" | "FAIL";
   inspect_status: "pass" | "reject";
   pass: boolean;
@@ -200,13 +202,14 @@ export async function runBatchTest(
   partName: string,
   count: number,
   topImages: string[] = [],
-  sideImages: string[] = []
+  sideImages: string[] = [],
+  rightImages: string[] = []
 ): Promise<RunBatchTestResult> {
   const key = partName.toLowerCase();
   const res = await fetch(`${PY_API}/run-test-batch/${encodeURIComponent(key)}?count=${count}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ top_images: topImages, side_images: sideImages }),
+    body: JSON.stringify({ top_images: topImages, side_images: sideImages, right_images: rightImages }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

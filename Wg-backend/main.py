@@ -38,6 +38,7 @@ import db
 class BatchInspectRequest(BaseModel):
     top_images: list[str] = []
     side_images: list[str] = []
+    right_images: list[str] = []
 
 
 def _b64_to_frame(b64_str: Optional[str]) -> Optional[np.ndarray]:
@@ -401,19 +402,10 @@ async def process_pair(part: str, pair_index: int = 1):
 
     pair_num = max(1, min(pair_index, 5))
 
-    if pair_num == 1:
-        measure_res, inspect_res = await asyncio.gather(
-            loop.run_in_executor(None, run_measurement, key, top, side),
-            loop.run_in_executor(None, run_inspection,  key, top, side),
-        )
-    else:
-        inspect_res = await loop.run_in_executor(None, run_inspection, key, top, side)
-        measure_res = {
-            "status": "PASS",
-            "measurements": [],
-            "top_annotated_b64": "",
-            "side_annotated_b64": "",
-        }
+    measure_res, inspect_res = await asyncio.gather(
+        loop.run_in_executor(None, run_measurement, key, top, side),
+        loop.run_in_executor(None, run_inspection,  key, top, side),
+    )
 
     res_data = {
         "pair_index": pair_num,
@@ -436,11 +428,12 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
     total_start = time.time()
     await asyncio.get_event_loop().run_in_executor(None, mgr.set_parameters, key)
 
-    top_imgs = request.top_images if request and request.top_images else []
-    side_imgs = request.side_images if request and request.side_images else []
+    top_imgs   = request.top_images   if request and request.top_images   else []
+    side_imgs  = request.side_images  if request and request.side_images  else []
+    right_imgs = request.right_images if request and request.right_images else []
 
-    if top_imgs or side_imgs:
-        num_pairs = max(len(top_imgs), len(side_imgs))
+    if top_imgs or side_imgs or right_imgs:
+        num_pairs = max(len(top_imgs), len(side_imgs), len(right_imgs))
         has_custom_snapshots = True
     else:
         num_pairs = max(1, min(count, 5))
@@ -457,23 +450,24 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
         pair_num = pair_idx + 1
 
         if has_custom_snapshots:
-            top_b64 = top_imgs[pair_idx] if pair_idx < len(top_imgs) else None
-            side_b64 = side_imgs[pair_idx] if pair_idx < len(side_imgs) else None
-            top = _b64_to_frame(top_b64)
-            side = _b64_to_frame(side_b64)
+            top_b64   = top_imgs[pair_idx]   if pair_idx < len(top_imgs)   else None
+            side_b64  = side_imgs[pair_idx]  if pair_idx < len(side_imgs)  else None
+            right_b64 = right_imgs[pair_idx] if pair_idx < len(right_imgs) else None
+            top   = _b64_to_frame(top_b64)
+            side  = _b64_to_frame(side_b64)
+            right = _b64_to_frame(right_b64)
 
-            async def _dummy_measure():
-                return {
-                    "status": "PASS",
-                    "measurements": [],
-                    "top_annotated_b64": "",
-                    "side_annotated_b64": "",
-                }
+            # Both sets (Pass 1 and Pass 2) are evaluated for BOTH dimensional measurement and visual defects
+            # Measurement runs on top + side (left). Right side also gets its own inspection pass.
+            measure_task       = loop.run_in_executor(None, run_measurement, key, top, side)
+            inspect_task       = loop.run_in_executor(None, run_inspection,  key, top, side)
+            right_inspect_task = loop.run_in_executor(None, run_inspection,  key, None, right) if right is not None else None
 
-            measure_task = loop.run_in_executor(None, run_measurement, key, top, side) if pair_num == 1 else _dummy_measure()
-            inspect_task = loop.run_in_executor(None, run_inspection, key, top, side)
-
-            measure_res, inspect_res = await asyncio.gather(measure_task, inspect_task)
+            if right_inspect_task:
+                measure_res, inspect_res, right_inspect_res = await asyncio.gather(measure_task, inspect_task, right_inspect_task)
+            else:
+                measure_res, inspect_res = await asyncio.gather(measure_task, inspect_task)
+                right_inspect_res = None
         else:
             cached_res = PRE_FETCHED_PAIRS.get((key, pair_num))
             if cached_res:
@@ -481,23 +475,17 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
                 inspect_res = cached_res["inspect_res"]
             else:
                 top, side = await loop.run_in_executor(None, mgr.grab_pair)
-                if pair_num == 1:
-                    measure_res, inspect_res = await asyncio.gather(
-                        loop.run_in_executor(None, run_measurement, key, top, side),
-                        loop.run_in_executor(None, run_inspection,  key, top, side),
-                    )
-                else:
-                    inspect_res = await loop.run_in_executor(None, run_inspection, key, top, side)
-                    measure_res = {
-                        "status": "PASS",
-                        "measurements": [],
-                        "top_annotated_b64": "",
-                        "side_annotated_b64": "",
-                    }
+                measure_res, inspect_res = await asyncio.gather(
+                    loop.run_in_executor(None, run_measurement, key, top, side),
+                    loop.run_in_executor(None, run_inspection,  key, top, side),
+                )
+            right_inspect_res = None
 
         measure_pass = measure_res["status"] == "PASS"
         inspect_pass = inspect_res["status"] == "pass"
-        pair_pass = measure_pass and inspect_pass
+        # Also factor right-side inspection into overall pass/fail
+        right_pass = (right_inspect_res is None) or (right_inspect_res["status"] == "pass")
+        pair_pass = measure_pass and inspect_pass and right_pass
         if not pair_pass:
             has_rejection = True
 
@@ -509,20 +497,33 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
             pair_measures.append(m_copy)
             all_measurements.append(m_copy)
 
-        # Tag defects with pair_index
+        # Tag defects with pair_index (left side + right side)
         pair_defects = []
         for d in inspect_res.get("defects", []):
             d_copy = dict(d)
             d_copy["pair_index"] = pair_num
             pair_defects.append(d_copy)
             all_defects.append(d_copy)
+        if right_inspect_res:
+            for d in right_inspect_res.get("defects", []):
+                d_copy = dict(d)
+                d_copy["pair_index"] = pair_num
+                d_copy["cam"] = "RIGHT SIDE VIEW"
+                pair_defects.append(d_copy)
+                all_defects.append(d_copy)
+
+        # Right-side annotated frames: run_inspection with side=right returns side_annotated_b64 for right
+        right_measure_b64 = measure_res.get("side_annotated_b64", "")  # reuse side overlay for right (same part geometry)
+        right_inspect_b64 = right_inspect_res.get("side_annotated_b64", "") if right_inspect_res else ""
 
         annotated_frames.append({
             "pair_index": pair_num,
-            "top_measure_b64": measure_res.get("top_annotated_b64", ""),
-            "side_measure_b64": measure_res.get("side_annotated_b64", ""),
-            "top_inspect_b64": inspect_res.get("top_annotated_b64", ""),
-            "side_inspect_b64": inspect_res.get("side_annotated_b64", ""),
+            "top_measure_b64":   measure_res.get("top_annotated_b64", ""),
+            "side_measure_b64":  measure_res.get("side_annotated_b64", ""),
+            "right_measure_b64": right_measure_b64,
+            "top_inspect_b64":   inspect_res.get("top_annotated_b64", ""),
+            "side_inspect_b64":  inspect_res.get("side_annotated_b64", ""),
+            "right_inspect_b64": right_inspect_b64,
             "measurements": pair_measures,
             "defects": pair_defects,
             "measure_status": measure_res["status"],
@@ -544,7 +545,9 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
             if frame_item.get("top_measure_b64"):
                 db_images.append({"image_type": f"Pair {p_idx} - Top View", "image_url": frame_item["top_measure_b64"]})
             if frame_item.get("side_measure_b64"):
-                db_images.append({"image_type": f"Pair {p_idx} - Side View", "image_url": frame_item["side_measure_b64"]})
+                db_images.append({"image_type": f"Pair {p_idx} - Left Side View", "image_url": frame_item["side_measure_b64"]})
+            if frame_item.get("right_measure_b64"):
+                db_images.append({"image_type": f"Pair {p_idx} - Right Side View", "image_url": frame_item["right_measure_b64"]})
 
         db.save_inspection(
             part_name=part,
