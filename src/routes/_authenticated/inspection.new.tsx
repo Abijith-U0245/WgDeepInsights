@@ -666,36 +666,42 @@ function NewInspectionPage() {
         );
       }
 
-      // Upload captured top and side views from all runs
+      // Save captured top, left side, and right side views from all passes
       const imagesToUpload: Array<{ b64: string; type: string }> = [];
       if (batchResult && batchResult.annotated_frames.length > 0) {
         batchResult.annotated_frames.forEach((pair) => {
           if (pair.top_measure_b64) {
-            imagesToUpload.push({ b64: pair.top_measure_b64, type: `pair_${pair.pair_index}_top_measure` });
+            imagesToUpload.push({ b64: pair.top_measure_b64, type: `Pass ${pair.pair_index} Top (Measurement)` });
           }
           if (pair.side_measure_b64) {
-            imagesToUpload.push({ b64: pair.side_measure_b64, type: `pair_${pair.pair_index}_side_measure` });
+            imagesToUpload.push({ b64: pair.side_measure_b64, type: `Pass ${pair.pair_index} Left Side (Measurement)` });
+          }
+          if (pair.right_measure_b64) {
+            imagesToUpload.push({ b64: pair.right_measure_b64, type: `Pass ${pair.pair_index} Right Side (Measurement)` });
           }
           if (pair.top_inspect_b64) {
-            imagesToUpload.push({ b64: pair.top_inspect_b64, type: `pair_${pair.pair_index}_top_inspect` });
+            imagesToUpload.push({ b64: pair.top_inspect_b64, type: `Pass ${pair.pair_index} Top (Defect)` });
           }
           if (pair.side_inspect_b64) {
-            imagesToUpload.push({ b64: pair.side_inspect_b64, type: `pair_${pair.pair_index}_side_inspect` });
+            imagesToUpload.push({ b64: pair.side_inspect_b64, type: `Pass ${pair.pair_index} Left Side (Defect)` });
+          }
+          if (pair.right_inspect_b64) {
+            imagesToUpload.push({ b64: pair.right_inspect_b64, type: `Pass ${pair.pair_index} Right Side (Defect)` });
           }
         });
       } else {
         testRuns.forEach((run, idx) => {
           if (run.top_measure_b64) {
-            imagesToUpload.push({ b64: run.top_measure_b64, type: `measurement_top_${idx + 1}` });
+            imagesToUpload.push({ b64: run.top_measure_b64, type: `Run ${idx + 1} Top (Measurement)` });
           }
           if (run.side_measure_b64) {
-            imagesToUpload.push({ b64: run.side_measure_b64, type: `measurement_side_${idx + 1}` });
+            imagesToUpload.push({ b64: run.side_measure_b64, type: `Run ${idx + 1} Left Side (Measurement)` });
           }
           if (run.top_inspect_b64) {
-            imagesToUpload.push({ b64: run.top_inspect_b64, type: `defect_top_${idx + 1}` });
+            imagesToUpload.push({ b64: run.top_inspect_b64, type: `Run ${idx + 1} Top (Defect)` });
           }
           if (run.side_inspect_b64) {
-            imagesToUpload.push({ b64: run.side_inspect_b64, type: `defect_side_${idx + 1}` });
+            imagesToUpload.push({ b64: run.side_inspect_b64, type: `Run ${idx + 1} Left Side (Defect)` });
           }
         });
       }
@@ -703,22 +709,15 @@ function NewInspectionPage() {
       for (const img of imagesToUpload) {
         if (!img.b64) continue;
         try {
-          const base64Data = (img.b64.includes(",") ? img.b64.split(",")[1] : img.b64) || "";
-          const binaryString = atob(base64Data);
-          const len = binaryString.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          const file = new File([bytes], `${img.type}.jpg`, { type: "image/jpeg" });
-          const ref = await uploadFile("captured-images", file, inspectionId);
+          const rawB64 = img.b64.includes(",") ? img.b64.split(",")[1] : img.b64;
+          const dataUrl = `data:image/jpeg;base64,${rawB64}`;
           await supabase.from("captured_images").insert({
             inspection_id: inspectionId,
             image_type: img.type,
-            image_url: ref,
+            image_url: dataUrl,
           });
         } catch (uploadErr) {
-          console.error("Failed to upload image to storage:", img.type, uploadErr);
+          console.error("Failed to save captured image to database:", img.type, uploadErr);
         }
       }
 

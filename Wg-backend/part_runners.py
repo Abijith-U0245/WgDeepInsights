@@ -4,6 +4,9 @@ defect-detection logic.  The heavy YOLO models are loaded once and cached.
 
 Each runner receives numpy frames (top, side) and returns a structured dict.
 No camera I/O here — that's done by CameraManager.
+
+Pin 1510 uses its own DualModelEngine (best.pt + Dimension_best.pt) with
+calibration matrices and homography-based mm measurement — see pin1510_engine.py.
 """
 
 from typing import Optional
@@ -14,6 +17,9 @@ import base64
 import cv2
 import numpy as np
 from ultralytics import YOLO
+
+# ── Pin 1510 dedicated dual-model engine ─────────────────────────────────────
+from pin1510_engine import pin1510_run_measurement, pin1510_run_inspection
 
 # ── Absolute paths to model weights ──────────────────────────────────────────
 _BASE = os.path.dirname(os.path.abspath(__file__))
@@ -321,7 +327,7 @@ def _pin_side(img, pmm_x, pmm_y, pmm_hole):
 # PUBLIC API
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_measurement(part: str, top: Optional[np.ndarray], side: Optional[np.ndarray]) -> dict:
+def run_measurement(part: str, top: Optional[np.ndarray], side: Optional[np.ndarray], right: Optional[np.ndarray] = None) -> dict:
     """
     Runs dimensional measurement for the specified part.
     Returns:
@@ -333,6 +339,11 @@ def run_measurement(part: str, top: Optional[np.ndarray], side: Optional[np.ndar
         }
     """
     key = part.lower().replace("-", "").replace(" ", "")
+
+    # ── Pin 1510: dedicated dual-model engine (best.pt + Dimension_best.pt) ──
+    if key == "pin":
+        return pin1510_run_measurement(top=top, side=side, right=right)
+
     top_ann  = top.copy() if top is not None else np.zeros((480, 640, 3), dtype=np.uint8)
     side_ann = side.copy() if side is not None else np.zeros((480, 640, 3), dtype=np.uint8)
     rows: list[dict] = []
@@ -405,25 +416,6 @@ def run_measurement(part: str, top: Optional[np.ndarray], side: Optional[np.ndar
             cv2.rectangle(side_ann,(bx,by),(bx+bw,by+bh),col,3)
         overall = "PASS" if all(r["pass"] for r in rows) else "FAIL"
 
-    elif key == "pin":
-        od, status_top, od_p, circ = _pin_top(top, _PIN["PMM_TOP_OD"])
-        ht, wd, holes, status_side, h_p, w_p, box_data = _pin_side(side, _PIN["PMM_SIDE_X"], _PIN["PMM_SIDE_Y"], _PIN["PMM_SIDE_HOLE"])
-        rows = [
-            {"parameter":"OD (Ø11.979mm)",  "measured":round(od,3),"expected":11.979,"tolerance":0.021,"unit":"mm","pass":od_p},
-            {"parameter":"Length (87.6mm)",  "measured":round(ht,3),"expected":87.6,  "tolerance":0.20, "unit":"mm","pass":h_p},
-            {"parameter":"Width (Ø11.979mm)","measured":round(wd,3),"expected":11.979,"tolerance":0.021,"unit":"mm","pass":w_p},
-        ]
-        for i, h in enumerate(holes):
-            rows.append({"parameter":f"Hole {i+1} Dia (Ø3.2mm)","measured":round(h["mm"],3),"expected":3.2,"tolerance":0.10,"unit":"mm","pass":h["pass"]})
-        if circ: cv2.circle(top_ann,(circ[0],circ[1]),circ[2],(0,255,255),3)
-        if box_data:
-            bx,by,bw,bh=box_data; col=(0,255,0) if status_side=="PASS" else (0,0,255)
-            cv2.rectangle(side_ann,(bx,by),(bx+bw,by+bh),col,2)
-            for h in holes:
-                hc=(0,255,0) if h["pass"] else (0,0,255)
-                cv2.circle(side_ann,(h["cx"],h["cy"]),h["r"],hc,2)
-        overall = "PASS" if all(r["pass"] for r in rows) else "FAIL"
-
     else:
         raise ValueError(f"Unknown part key: {key}")
 
@@ -442,7 +434,7 @@ def run_measurement(part: str, top: Optional[np.ndarray], side: Optional[np.ndar
     }
 
 
-def run_inspection(part: str, top: Optional[np.ndarray], side: Optional[np.ndarray]) -> dict:
+def run_inspection(part: str, top: Optional[np.ndarray], side: Optional[np.ndarray], right: Optional[np.ndarray] = None) -> dict:
     """
     Runs YOLO surface defect detection for the specified part.
     Returns:
@@ -460,6 +452,11 @@ def run_inspection(part: str, top: Optional[np.ndarray], side: Optional[np.ndarr
     'reject' with a synthetic 'part_not_recognized' defect entry.
     """
     key = part.lower().replace("-","").replace(" ","")
+
+    # ── Pin 1510: dedicated dual-model engine ─────────────────────────────────
+    if key == "pin":
+        return pin1510_run_inspection(top=top, side=side, right=right)
+
     model = _get_model(key)
 
     def _is_ok_class(cls_name: str) -> bool:

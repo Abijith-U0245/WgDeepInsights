@@ -247,21 +247,21 @@ class CameraManager:
                 print(f"[CAM] Box 3 -> Assigned to RIGHT SIDE camera ({serial})")
 
         # ── Start Grabbing with Role-Specific Exposure & Gain ────────────────
-        # Standard Default:
-        # TOP:   exp: 5245.0,  gain: 3.4464
-        # LEFT:  exp: 20000.0, gain: 9.65
-        # RIGHT: exp: 78000.0, gain: 9.5
+        # Standard Default (from Pin 1510 camera_lag.py SLOT_PROFILES):
+        # TOP:   exp: 5245.0,  gain: 3.5   (Camera_1 — visual only)
+        # LEFT:  exp: 20000.0, gain: 9.65  (Camera_2 — both models)
+        # RIGHT: exp: 78000.0, gain: 9.5   (Camera_3 — both models)
         if "top" in self._cameras:
             c = self._cameras["top"]
             try:
                 c.MV_CC_SetEnumValue("ExposureAuto", 0)
                 c.MV_CC_SetEnumValue("GainAuto", 0)
                 c.MV_CC_SetFloatValue("ExposureTime", 5245.0)
-                c.MV_CC_SetFloatValue("Gain", 3.4464)
+                c.MV_CC_SetFloatValue("Gain", 3.5)
             except Exception as e:
                 print(f"[CAM] Top exposure init error: {e}")
             c.MV_CC_StartGrabbing()
-            print("[CAM] Box 1 (TOP VIEW) active: exp=5245.0us, gain=3.4464")
+            print("[CAM] Box 1 (TOP VIEW) active: exp=5245.0us, gain=3.5")
 
         if "side" in self._cameras:
             c = self._cameras["side"]
@@ -428,7 +428,7 @@ class CameraManager:
 
     STANDARD_EXPOSURES = {
         "top_exposure": 5245.0,
-        "top_gain": 3.4464,
+        "top_gain": 3.5,          # From camera_lag.py Camera_1 slot profile
         "side_exposure": 20000.0,
         "side_gain": 9.65,
         "right_exposure": 78000.0,
@@ -440,8 +440,8 @@ class CameraManager:
         if DEMO_MODE:
             return
 
-        # Standard Default as requested:
-        # Top: exp=5245.0, gain=3.4464 | Left: exp=20000.0, gain=9.65 | Right: exp=78000.0, gain=9.5
+        # Standard Default as requested (from camera_lag.py SLOT_PROFILES):
+        # Top: exp=5245.0, gain=3.5 | Left: exp=20000.0, gain=9.65 | Right: exp=78000.0, gain=9.5
         if self._current_params == ("standard", "standard"):
             return  # Already configured to standard — avoid blocking camera locks or dropping frames
 

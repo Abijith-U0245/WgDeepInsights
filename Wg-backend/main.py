@@ -21,6 +21,7 @@ import asyncio
 import base64
 import time
 import contextlib
+import re
 import cv2
 import numpy as np
 
@@ -78,10 +79,41 @@ VALID_PARTS = {"capnut", "stud", "adapter", "adaptor", "pin"}
 
 
 def _normalise(part: str) -> str:
-    key = part.lower().replace("-", "").replace(" ", "")
-    if key not in VALID_PARTS:
-        raise HTTPException(status_code=404, detail=f"Unknown part: {part}")
-    return key
+    """
+    Normalise any part string (e.g. 'Pin', 'Pin (100631510)', '100631510',
+    'Capnut', 'Stud', 'Adapter', etc.) into one of the valid canonical keys:
+    'pin', 'capnut', 'stud', 'adapter'.
+    """
+    if not part:
+        return "pin"
+    raw = part.lower().strip().strip('"').strip("'")
+
+    # Match common pin names / numbers (Pin 1510, Pin 1490, etc.)
+    if any(k in raw for k in ("pin", "1510", "1490", "100631510", "100631490")):
+        return "pin"
+    if any(k in raw for k in ("capnut", "100336950")):
+        return "capnut"
+    if any(k in raw for k in ("stud", "100631500")):
+        return "stud"
+    if any(k in raw for k in ("adapt", "100631480")):
+        return "adapter"
+
+    # Clean non-alphanumeric
+    cleaned = re.sub(r"[^a-z0-9]", "", raw)
+    if any(k in cleaned for k in ("pin", "1510", "1490", "100631510", "100631490")):
+        return "pin"
+    if "capnut" in cleaned:
+        return "capnut"
+    if "stud" in cleaned:
+        return "stud"
+    if "adapt" in cleaned:
+        return "adapter"
+
+    for vp in VALID_PARTS:
+        if vp in cleaned:
+            return "adapter" if vp == "adaptor" else vp
+
+    raise HTTPException(status_code=404, detail=f"Unknown part: {part}")
 
 
 # ── /health ────────────────────────────────────────────────────────────────
@@ -457,17 +489,14 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
             side  = _b64_to_frame(side_b64)
             right = _b64_to_frame(right_b64)
 
-            # Both sets (Pass 1 and Pass 2) are evaluated for BOTH dimensional measurement and visual defects
-            # Measurement runs on top + side (left). Right side also gets its own inspection pass.
-            measure_task       = loop.run_in_executor(None, run_measurement, key, top, side)
-            inspect_task       = loop.run_in_executor(None, run_inspection,  key, top, side)
-            right_inspect_task = loop.run_in_executor(None, run_inspection,  key, None, right) if right is not None else None
+            # For Pin 1510: run_measurement handles all 3 cameras (top+left+right)
+            # via DualModelEngine; run_inspection similarly handles all 3 internally.
+            # right frame is passed into both so Pin engine processes it.
+            measure_task = loop.run_in_executor(None, run_measurement, key, top, side, right)
+            inspect_task = loop.run_in_executor(None, run_inspection,  key, top, side, right)
 
-            if right_inspect_task:
-                measure_res, inspect_res, right_inspect_res = await asyncio.gather(measure_task, inspect_task, right_inspect_task)
-            else:
-                measure_res, inspect_res = await asyncio.gather(measure_task, inspect_task)
-                right_inspect_res = None
+            measure_res, inspect_res = await asyncio.gather(measure_task, inspect_task)
+            right_inspect_res = None   # Right is already embedded in inspect_res for pin
         else:
             cached_res = PRE_FETCHED_PAIRS.get((key, pair_num))
             if cached_res:
@@ -504,6 +533,8 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
             d_copy["pair_index"] = pair_num
             pair_defects.append(d_copy)
             all_defects.append(d_copy)
+        # Note: for Pin 1510, right side defects are already embedded in inspect_res.defects
+        # (pin1510_run_inspection handles all 3 cameras); right_inspect_res is None for pin.
         if right_inspect_res:
             for d in right_inspect_res.get("defects", []):
                 d_copy = dict(d)
@@ -512,9 +543,14 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
                 pair_defects.append(d_copy)
                 all_defects.append(d_copy)
 
-        # Right-side annotated frames: run_inspection with side=right returns side_annotated_b64 for right
-        right_measure_b64 = measure_res.get("side_annotated_b64", "")  # reuse side overlay for right (same part geometry)
-        right_inspect_b64 = right_inspect_res.get("side_annotated_b64", "") if right_inspect_res else ""
+        # Right-side annotated frames
+        # For Pin 1510: pin1510_run_measurement returns right_annotated_b64 directly;
+        # pin1510_run_inspection returns right_annotated_b64 directly.
+        right_measure_b64 = measure_res.get("right_annotated_b64") or measure_res.get("side_annotated_b64", "")
+        right_inspect_b64 = (
+            inspect_res.get("right_annotated_b64") or
+            (right_inspect_res.get("side_annotated_b64", "") if right_inspect_res else "")
+        )
 
         annotated_frames.append({
             "pair_index": pair_num,
@@ -542,12 +578,18 @@ async def run_test_batch(part: str, request: Optional[BatchInspectRequest] = Non
         db_images = []
         for frame_item in annotated_frames:
             p_idx = frame_item.get("pair_index", 1)
-            if frame_item.get("top_measure_b64"):
-                db_images.append({"image_type": f"Pair {p_idx} - Top View", "image_url": frame_item["top_measure_b64"]})
-            if frame_item.get("side_measure_b64"):
-                db_images.append({"image_type": f"Pair {p_idx} - Left Side View", "image_url": frame_item["side_measure_b64"]})
-            if frame_item.get("right_measure_b64"):
-                db_images.append({"image_type": f"Pair {p_idx} - Right Side View", "image_url": frame_item["right_measure_b64"]})
+            for key_name, label in (
+                ("top_measure_b64", f"Pass {p_idx} Top (Measurement)"),
+                ("side_measure_b64", f"Pass {p_idx} Left Side (Measurement)"),
+                ("right_measure_b64", f"Pass {p_idx} Right Side (Measurement)"),
+                ("top_inspect_b64", f"Pass {p_idx} Top (Defect)"),
+                ("side_inspect_b64", f"Pass {p_idx} Left Side (Defect)"),
+                ("right_inspect_b64", f"Pass {p_idx} Right Side (Defect)"),
+            ):
+                b64 = frame_item.get(key_name)
+                if b64:
+                    url = b64 if b64.startswith("data:") else f"data:image/jpeg;base64,{b64}"
+                    db_images.append({"image_type": label, "image_url": url})
 
         db.save_inspection(
             part_name=part,
